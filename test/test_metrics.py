@@ -1,7 +1,7 @@
 import math
 
-from factoryrunner.metrics import (in_speed_zone, leg_metrics, min_clearance, MONITOR_SLOWDOWN,
-                                   MONITOR_STOP, path_length, time_in_state)
+from factoryrunner.metrics import (entries_into, in_speed_zone, leg_metrics, min_clearance,
+                                   MONITOR_SLOWDOWN, MONITOR_STOP, path_length, time_in_state)
 import pytest
 
 
@@ -57,9 +57,20 @@ def test_leg_metrics_combines_samples():
     assert m['slowdown_s'] == pytest.approx(4.0)
     assert m['stop_s'] == pytest.approx(1.0)
     assert m['speed_zone_s'] == pytest.approx(10.0)
+    assert m['stop_events'] == 1
 
 
 def test_leg_metrics_without_valid_scans():
     m = leg_metrics(0.0, 5.0, [], [None], [(0.0, 0)], [(0.0, False)])
     assert m['min_clearance_m'] is None
     assert m['path_length_m'] == 0.0
+
+
+def test_entries_into_counts_each_entry_once():
+    transitions = [(0, 0), (1, 1), (2, 1), (3, 0), (4, 1)]
+    assert entries_into(transitions, 1) == 2
+    assert entries_into(transitions, 2) == 0
+
+
+def test_entries_into_counts_initial_state():
+    assert entries_into([(0, 1)], 1) == 1

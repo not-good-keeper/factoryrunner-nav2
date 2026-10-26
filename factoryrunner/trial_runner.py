@@ -20,7 +20,7 @@ from factoryrunner.metrics import in_speed_zone, leg_metrics, min_clearance
 from factoryrunner.mission_config import load_mission, MissionConfigError
 from factoryrunner.mission_controller import (run_leg, sim_seconds, to_pose_stamped,
                                               warn_unless_cyclone)
-from factoryrunner.mission_log import append_row, check_leg_timeout
+from factoryrunner.mission_log import append_row, check_leg_timeout, default_results_dir
 from geometry_msgs.msg import PoseWithCovarianceStamped
 from nav2_msgs.msg import CollisionMonitorState, SpeedLimit
 from nav2_simple_commander.robot_navigator import BasicNavigator, TaskResult
@@ -32,7 +32,8 @@ from sensor_msgs.msg import LaserScan
 
 TRIAL_FIELDS = ['run_id', 'lap', 'leg', 'station', 'obstacle', 'result', 'start_s', 'end_s',
                 'duration_s', 'path_length_m', 'recoveries', 'min_clearance_m', 'slowdown_s',
-                'stop_s', 'speed_zone_s', 'obstacle_trigger_dist_m', 'obstacle_spawn_wall_s']
+                'stop_s', 'stop_events', 'speed_zone_s', 'obstacle_trigger_dist_m',
+                'obstacle_spawn_wall_s']
 
 
 def _fmt(value):
@@ -135,9 +136,9 @@ class ObstacleDrop:
 
 
 def run_trials(navigator, mission, csv_path, run_id, leg_timeout_s):
-    """Drive mission.laps laps and return (legs succeeded, legs run)."""
+    """Drive mission.laps laps; return one dict of metrics per leg that ran."""
     recorder = LegRecorder(navigator)
-    succeeded = run = 0
+    legs = []
     for lap in range(1, mission.laps + 1):
         obstacle_lap = lap in mission.obstacle_laps
         print(f'=== lap {lap}/{mission.laps}{" (obstacle)" if obstacle_lap else ""}')
@@ -160,18 +161,18 @@ def run_trials(navigator, mission, csv_path, run_id, leg_timeout_s):
                 'duration_s': _fmt(m['duration_s']), 'path_length_m': _fmt(m['path_length_m']),
                 'recoveries': recoveries, 'min_clearance_m': _fmt(m['min_clearance_m']),
                 'slowdown_s': _fmt(m['slowdown_s']), 'stop_s': _fmt(m['stop_s']),
+                'stop_events': m['stop_events'],
                 'speed_zone_s': _fmt(m['speed_zone_s']),
                 'obstacle_trigger_dist_m': _fmt(drop.trigger_dist if drop else None),
                 'obstacle_spawn_wall_s': _fmt(drop.spawn_wall_s if drop else None),
             }, TRIAL_FIELDS)
-            run += 1
+            legs.append(dict(m, lap=lap, station=station.name, result=result.name,
+                             recoveries=recoveries))
             print(f'[lap {lap} leg {leg}] {station.name}: {result.name} in {end - start:.1f} s')
-            if result == TaskResult.SUCCEEDED:
-                succeeded += 1
-            elif result == TaskResult.CANCELED:
+            if result == TaskResult.CANCELED:
                 print('leg timed out; stopping the trials in case Nav2 is stuck')
-                return succeeded, run
-    return succeeded, run
+                return legs
+    return legs
 
 
 def main(argv=None):
@@ -180,9 +181,11 @@ def main(argv=None):
     navigator.set_parameters([Parameter('use_sim_time', Parameter.Type.BOOL, True)])
     warn_unless_cyclone(navigator)
 
-    default_mission = Path(get_package_share_directory('factoryrunner')) / 'config' / 'mission.yaml'
+    share = Path(get_package_share_directory('factoryrunner'))
+    default_mission = share / 'config' / 'mission.yaml'
     mission_file = navigator.declare_parameter('mission_file', str(default_mission)).value
-    results_dir = navigator.declare_parameter('results_dir', str(Path.cwd() / 'results')).value
+    results_dir = navigator.declare_parameter(
+        'results_dir', str(default_results_dir(share))).value
     leg_timeout_s = navigator.declare_parameter('leg_timeout_s', 120.0).value
 
     try:
@@ -204,13 +207,14 @@ def main(argv=None):
 
     total = mission.laps * len(mission.stations)
     try:
-        succeeded, run = run_trials(navigator, mission, csv_path, run_id, leg_timeout_s)
+        legs = run_trials(navigator, mission, csv_path, run_id, leg_timeout_s)
     except (KeyboardInterrupt, ExternalShutdownException):
         # Every finished leg is already in the CSV; the interrupted one is not.
         print(f'\ninterrupted; legs finished so far are in {csv_path}')
         return 130
     print()
-    print(f'Legs succeeded: {succeeded}/{run} run of {total} planned')
+    succeeded = sum(leg['result'] == 'SUCCEEDED' for leg in legs)
+    print(f'Legs succeeded: {succeeded}/{len(legs)} run of {total} planned')
     print(f'Logged to {csv_path}')
 
     navigator.destroy_node()

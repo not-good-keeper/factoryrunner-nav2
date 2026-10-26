@@ -40,6 +40,16 @@ def time_in_state(transitions, state, end_time):
     return held
 
 
+def entries_into(transitions, state):
+    """Count how many times `state` was entered, given time-ordered (stamp, state) changes."""
+    count, previous = 0, None
+    for _, current in transitions:
+        if current == state and previous != state:
+            count += 1
+        previous = current
+    return count
+
+
 def in_speed_zone(speed_limit):
     """Return True if a percentage /speed_limit value means the robot is being slowed.
 
@@ -63,5 +73,6 @@ def leg_metrics(start, end, positions, clearances, monitor_transitions, zone_tra
         'min_clearance_m': min(valid) if valid else None,
         'slowdown_s': time_in_state(monitor_transitions, MONITOR_SLOWDOWN, end),
         'stop_s': time_in_state(monitor_transitions, MONITOR_STOP, end),
+        'stop_events': entries_into(monitor_transitions, MONITOR_STOP),
         'speed_zone_s': time_in_state(zone_transitions, True, end),
     }

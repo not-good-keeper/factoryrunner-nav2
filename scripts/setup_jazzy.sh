@@ -22,9 +22,15 @@ sudo apt-get install -y \
     ros-jazzy-desktop ros-jazzy-navigation2 ros-jazzy-nav2-bringup \
     ros-jazzy-nav2-minimal-tb3-sim ros-jazzy-nav2-minimal-tb4-sim ros-jazzy-ros-gz \
     ros-jazzy-nav2-simple-commander ros-jazzy-rmw-cyclonedds-cpp ros-dev-tools \
-    python3-pytest python3-flake8 python3-matplotlib python3-pandas mesa-utils git
+    python3-pytest python3-flake8 python3-matplotlib python3-pandas python3.12-venv mesa-utils git
 
 grep -qx 'source /opt/ros/jazzy/setup.bash' ~/.bashrc || echo 'source /opt/ros/jazzy/setup.bash' >> ~/.bashrc
+# Optuna for scripts/tune.py; the venv still sees the ROS Python packages.
+if [ ! -x ~/fr_venv/bin/python ]; then
+    python3 -m venv --system-site-packages ~/fr_venv
+fi
+~/fr_venv/bin/pip install -q optuna
+
 # Nav2 froze under the default Fast DDS on this setup (docs/CHALLENGES.md); every terminal needs Cyclone.
 grep -qx 'export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp' ~/.bashrc \
     || echo 'export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp' >> ~/.bashrc
