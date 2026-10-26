@@ -24,9 +24,7 @@ set -u
 cd "$ws"
 
 echo '== lint'
-# ci.yml runs plain `flake8 src/factoryrunner-nav2` from the workspace root, but flake8 7
-# only reads config from the directory it runs in, so that skips the repo's setup.cfg
-# (100-column lines, ament docstring ignores). Point it at the config explicitly.
+# Same as ci.yml: flake8 7 only reads config from the directory it runs in.
 python3 -m flake8 --config "$pkg/setup.cfg" src/factoryrunner-nav2
 
 echo '== build'

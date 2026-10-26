@@ -19,7 +19,8 @@ jobs:
           rosdep install --from-paths src --ignore-src -y --rosdistro jazzy
           apt-get install -y python3-pytest python3-flake8
       - name: Lint
-        run: flake8 src/factoryrunner-nav2
+        # flake8 7 reads config only from the working directory, so name the repo's setup.cfg
+        run: flake8 --config src/factoryrunner-nav2/setup.cfg src/factoryrunner-nav2
       - name: Build
         shell: bash
         run: |
