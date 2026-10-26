@@ -25,6 +25,7 @@ from geometry_msgs.msg import PoseWithCovarianceStamped
 from nav2_msgs.msg import CollisionMonitorState, SpeedLimit
 from nav2_simple_commander.robot_navigator import BasicNavigator, TaskResult
 import rclpy
+from rclpy.executors import ExternalShutdownException
 from rclpy.parameter import Parameter
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import LaserScan
@@ -201,8 +202,13 @@ def main(argv=None):
     navigator.setInitialPose(to_pose_stamped(navigator, mission.initial_pose, mission.frame_id))
     navigator.waitUntilNav2Active()
 
-    succeeded, run = run_trials(navigator, mission, csv_path, run_id, leg_timeout_s)
     total = mission.laps * len(mission.stations)
+    try:
+        succeeded, run = run_trials(navigator, mission, csv_path, run_id, leg_timeout_s)
+    except (KeyboardInterrupt, ExternalShutdownException):
+        # Every finished leg is already in the CSV; the interrupted one is not.
+        print(f'\ninterrupted; legs finished so far are in {csv_path}')
+        return 130
     print()
     print(f'Legs succeeded: {succeeded}/{run} run of {total} planned')
     print(f'Logged to {csv_path}')
