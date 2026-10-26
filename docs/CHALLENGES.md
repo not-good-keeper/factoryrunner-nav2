@@ -65,3 +65,26 @@ Runs in `results/missions.csv` (all headless):
 - **What it means for the study:** that lap measured the parameters without the obstacle, so its objective (95.8) is not comparable with the others. It was not the best trial and was not used for validation; the best trial (23, objective 88.7) had its pallet. The TPE sampler still learned from trial 16, which may have nudged later samples slightly.
 - **Cause:** not found. The same command spawned the pallet in the other 24 trials and in every earlier run, typically in under a second. `ros2 run` starts a Python process and a ROS node for each spawn, so a slow DDS discovery or a stall on a busy machine is the likely suspect. UNVERIFIED.
 - **Handling:** the trial runner already records the failure in the CSV instead of hiding it, which is how it was caught. A retry, or spawning through Gazebo's in-process transport as the moving obstacle does, would make it more robust; not done before the freeze.
+
+## 2026-10-27 — A 10 s stall takes Nav2 down for good
+
+- **Test:** to check the new health monitor, I froze the process hosting all Nav2 nodes with `SIGSTOP` for 10 s during the first leg of a mission, then resumed it (`results/freeze_test/`).
+- **What the monitor saw:** WARN after 1.3 s (`map → odom` stale), ERROR after 2.3 s (no lifecycle answer from any of the seven watched nodes) and after 3.3 s (`map → odom` 3.3 s old). It went back to OK 4.5 s after the resume, then to ERROR again 20 s after the freeze.
+- **Why it failed again:** the Nav2 log shows both lifecycle managers declaring `CRITICAL FAILURE ... IS DOWN after not receiving a heartbeat for 4000 ms` the moment the process resumed. They then deactivated and cleaned up every managed node ("Managed nodes have been reset"); `bt_navigator` aborted the active goal while shutting down. Nothing brings the stack back after that reset.
+- **Outcome:** the mission controller's leg timeout ended the hung leg as `CANCELED` after 120 s, and the cancel request gave up after its 10 s limit (130.0 s in total) instead of blocking. Without the task-2 timeout, the controller would have waited forever on a dead stack.
+- **Takeaway:** any stall over Nav2's 4 s bond timeout (a frozen middleware, an overloaded machine) is fatal to navigation by design. That makes outside monitoring, and a leg timeout in the application, necessary rather than optional. A supervisor that calls the lifecycle managers' reset/startup service could recover automatically; not built.
+
+## 2026-10-27 — Stop field holds the robot next to a close obstacle
+
+- **Symptom:** in the obstacle-distance sweep, the third lap with the pallet dropped about 1 m ahead ended `CANCELED` at the 120 s leg timeout. The trial row shows 108.6 s in the collision monitor's stop state, one stop event, and a closest scan return of 0.32 m (`results/obstacle_sweep_20261026-213234/d1.2/`).
+- **Cause:** the pallet ended up inside the `StopZone` polygon. In that state the collision monitor zeroes every velocity command from the controller, including the backing-up or turning that would move the robot away, so neither MPPI nor the behaviour tree's recoveries could get it out. The robot stayed stopped until the trial runner's leg timeout canceled the goal.
+- **Fix:** not changed. The stop box is there to stop the robot, and making it smaller or letting commands through near obstacles weakens the safety layer this project is demonstrating. The leg timeout already turns the deadlock into a logged failure instead of a robot waiting forever. Options for later: a smaller stop box behind the robot so reversing stays possible, or a recovery that asks for operator help when the stop state lasts longer than a few seconds.
+- **Where the boundary is:** 0 of 9 laps deadlocked with the pallet dropped at the 3.0, 2.0 and 1.5 m settings (logged drops at 1.15 m or more), 1 of 3 at the 1.2 m setting (logged drops 0.98–1.17 m).
+
+## 2026-10-27 — Two attribute names that broke their base classes
+
+- **Symptom 1:** the first run of the health monitor died at once with `AttributeError: 'str' object has no attribute '_executor_event'` inside the rclpy executor.
+- **Cause 1:** I had stored the lifecycle service clients in `self._clients`. `rclpy.node.Node` keeps its own list of clients under that name, so the executor iterated over my dict's keys (node names) instead of client objects. Renamed to `_state_clients`; found by running the node against the live sim before committing.
+- **Symptom 2:** the first moving-obstacle trial run crashed after one leg with `TypeError: 'Event' object is not callable` in `Thread.join()`, losing the row for the leg that had just finished (`results/crossing/trials_20261026-212629.csv` holds only leg 1).
+- **Cause 2:** the mover thread kept its stop flag in `self._stop`. `threading.Thread` has a private `_stop()` method that `join()` calls, so the flag replaced it. Renamed to `_halt`, added a regression test that stops and joins a mover, and reran the three laps (`trials_20261026-215920.csv`, 12/12 legs).
+- **Lesson:** both were private names shadowed on a framework base class, and neither showed up in unit tests of the pure logic. Only running the real thing caught them.

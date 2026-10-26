@@ -215,25 +215,25 @@ def plot_sweep(legs, out_png, reference=None):
             ref = [value(r) for r in reference]
             ax.axhspan(min(ref), max(ref), color=ZONE_SHADE, alpha=0.5, linewidth=0)
         for i, d in enumerate(distances):
-            ys = [value(r) for r in legs[d]]
-            ax.scatter([i] * len(ys), ys, s=26, color=OBSTACLE, zorder=3)
+            ok = [value(r) for r in legs[d] if r['result'] == 'SUCCEEDED']
+            bad = [value(r) for r in legs[d] if r['result'] != 'SUCCEEDED']
+            ax.scatter([i] * len(ok), ok, s=26, color=OBSTACLE, zorder=3)
+            ax.scatter([i] * len(bad), bad, s=40, marker='x', color=INK, linewidths=1.5, zorder=4)
+            ys = ok + bad
             ax.hlines(statistics.median(ys), i - 0.2, i + 0.2, color=INK, linewidth=1.5, zorder=4)
-            failed = sum(r['result'] != 'SUCCEEDED' for r in legs[d])
-            if failed:
-                ax.annotate(f'{failed} failed', (i, max(ys)), textcoords='offset points',
-                            xytext=(0, 6), ha='center', fontsize=7, color=INK)
         if label.startswith('Slowdown'):
             top = max((value(r) for d in distances for r in legs[d]), default=0.0)
             ax.set_ylim(0, max(1.0, top * 1.15))
         ax.set_xticks(range(len(distances)))
         ax.set_xticklabels([f'{d:g} m' for d in distances])
-        ax.set_xlabel('Pallet dropped when robot is', color=MUTED, fontsize=8)
+        ax.set_xlabel('Configured drop distance', color=MUTED, fontsize=8)
         ax.set_title(label, loc='left', color=INK, fontsize=9)
     handles = [plt.Line2D([], [], marker='o', linestyle='', color=OBSTACLE, label='One lap'),
+               plt.Line2D([], [], marker='x', linestyle='', color=INK, label='Leg did not succeed'),
                plt.Line2D([], [], color=INK, linewidth=1.5, label='Median')]
     if reference:
         handles.append(Patch(color=ZONE_SHADE, alpha=0.5, label='Range without a pallet'))
-    fig.legend(handles=handles, frameon=False, fontsize=8, loc='lower left', ncol=3)
+    fig.legend(handles=handles, frameon=False, fontsize=8, loc='lower left', ncol=4)
     fig.tight_layout(rect=(0, 0.08, 1, 1))
     fig.savefig(out_png)
     plt.close(fig)

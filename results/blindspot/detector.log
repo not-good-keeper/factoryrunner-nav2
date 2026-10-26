@@ -1,0 +1,6 @@
+[depth_obstacle_detector-2] [WARN] [1793050131.150412934] [depth_obstacle_detector]: obstacle 3.32 m ahead, 0.04 m tall: below the LiDAR plane
+[depth_obstacle_detector-2] [INFO] [1793050131.350397924] [depth_obstacle_detector]: no obstacle below the LiDAR plane in view
+[depth_obstacle_detector-2] [WARN] [1793050135.276867751] [depth_obstacle_detector]: obstacle 2.24 m ahead, 0.09 m tall: below the LiDAR plane
+[depth_obstacle_detector-2] [INFO] [1793050164.354504062] [depth_obstacle_detector]: no obstacle below the LiDAR plane in view
+[depth_obstacle_detector-2] [WARN] [1793050167.170670266] [depth_obstacle_detector]: obstacle 0.29 m ahead, 0.10 m tall: below the LiDAR plane
+[depth_obstacle_detector-2] [INFO] [1793050206.616165901] [depth_obstacle_detector]: no obstacle below the LiDAR plane in view

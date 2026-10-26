@@ -1,0 +1,5 @@
+run_id,lap,leg,station,obstacle,result,start_s,end_s,duration_s,path_length_m,recoveries,min_clearance_m,slowdown_s,stop_s,stop_events,speed_zone_s,obstacle_trigger_dist_m,obstacle_spawn_wall_s
+20261026-213025,1,1,RAW_MATERIAL,0,SUCCEEDED,4.10,23.43,19.33,6.38,0,0.83,0.00,0.00,0,0.00,,
+20261026-213025,1,2,CNC_CELL,1,SUCCEEDED,23.43,57.29,33.86,10.45,0,0.73,0.00,0.00,0,10.41,1.40,0.67
+20261026-213025,1,3,INSPECTION,0,SUCCEEDED,57.29,79.08,21.79,5.60,0,1.08,0.00,0.00,0,13.15,,
+20261026-213025,1,4,DOCK,0,SUCCEEDED,79.08,101.09,22.01,9.16,0,0.65,0.00,0.00,0,0.00,,

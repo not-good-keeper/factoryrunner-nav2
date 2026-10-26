@@ -1,0 +1,128 @@
+FACTORYRUNNER | JOB-001 | run 20261026-212343
+[INFO] [1793049837.965812623] [factoryrunner_mission]: Nav2 is ready for use!
+[INFO] [1793049837.966533520] [factoryrunner_mission]: Navigating to goal: 4.5 -4.0...
+[1/4] Goal accepted: RAW_MATERIAL (4.50, -4.00)
+       7.05 m to go, recoveries 0
+       7.05 m to go, recoveries 0
+       6.95 m to go, recoveries 0
+       6.26 m to go, recoveries 0
+       6.06 m to go, recoveries 0
+       5.61 m to go, recoveries 0
+       4.82 m to go, recoveries 0
+       4.62 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+       4.45 m to go, recoveries 0
+[1/4] RAW_MATERIAL: no result after 120 s, canceling
+      cancel not acknowledged within 10 s; Nav2 may be frozen
+[1/4] RAW_MATERIAL: CANCELED in 130.0 s
+
+MISSION FAILED
+Goals succeeded: 0/4
+Elapsed sim time: 130.0 s
+Logged to /home/nethi/fr_ws/src/factoryrunner-nav2/.planning/task14/missions/missions.csv
+[ros2run]: Process exited with failure 1

@@ -1,0 +1,16 @@
+[INFO] [1793049830.388022937] [health_monitor]: localization (map->odom): OK - map->odom 0.17 s old
+[INFO] [1793049830.388574838] [health_monitor]: lidar (/scan): STALE - starting up (2.5 Hz, expected about 5)
+[INFO] [1793049830.390059655] [health_monitor]: nav2 lifecycle: STALE - starting up (not active: bt_navigator=inactive, collision_monitor=inactive, planner_server=inactive, velocity_smoother=inactive)
+[INFO] [1793049830.390862428] [health_monitor]: collision monitor: OK - no state published yet (publishes on change only)
+[INFO] [1793049831.353402619] [health_monitor]: lidar (/scan): OK - 4.5 Hz
+[WARN] [1793049835.820766119] [health_monitor]: nav2 lifecycle: WARN - not active: bt_navigator=inactive, collision_monitor=inactive
+[INFO] [1793049836.906533357] [health_monitor]: nav2 lifecycle: OK - 7 nodes active
+[WARN] [1793049848.117736221] [health_monitor]: localization (map->odom): WARN - map->odom is 1.3 s old
+[ERROR] [1793049849.120603928] [health_monitor]: nav2 lifecycle: ERROR - no answer from amcl, bt_navigator, collision_monitor, controller_server, map_server, planner_server, velocity_smoother
+[ERROR] [1793049850.118937007] [health_monitor]: localization (map->odom): ERROR - map->odom is 3.3 s old
+[INFO] [1793049861.297854247] [health_monitor]: localization (map->odom): OK - map->odom 0.17 s old
+[WARN] [1793049861.298158737] [health_monitor]: nav2 lifecycle: WARN - not active: bt_navigator=inactive, collision_monitor=inactive
+[WARN] [1793049861.298378694] [health_monitor]: collision monitor: WARN - stop field active
+[WARN] [1793049867.065730781] [health_monitor]: localization (map->odom): WARN - map->odom is 1.2 s old
+[ERROR] [1793049868.064899824] [health_monitor]: nav2 lifecycle: ERROR - no answer from amcl, bt_navigator, collision_monitor, controller_server, map_server, planner_server, velocity_smoother
+[ERROR] [1793049869.104710971] [health_monitor]: localization (map->odom): ERROR - map->odom is 3.2 s old

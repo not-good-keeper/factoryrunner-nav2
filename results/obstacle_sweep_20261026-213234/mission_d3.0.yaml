@@ -1,0 +1,17 @@
+# Map-frame poses on Nav2's depot map. The robot spawns at Gazebo (-8, 0), which is
+# the map origin. Stations were picked from depot.pgm with >= 1.7 m clearance to the
+# nearest occupied cell; check them in RViz before trusting them.
+mission:
+  job_id: JOB-001
+  frame_id: map
+  initial_pose: {x: 0.0, y: 0.0, yaw: 0.0}
+  stations:
+    - {name: RAW_MATERIAL, x: 4.5, y: -4.0, yaw: 0.0}
+    - {name: CNC_CELL, x: 12.0, y: 1.28, yaw: 1.57}
+    - {name: INSPECTION, x: 6.0, y: 1.5, yaw: 3.14}
+    - {name: DOCK, x: 0.0, y: 0.0, yaw: 0.0}
+  # laps, obstacle_laps and obstacle are read by trial_runner; mission_controller drives one loop.
+  laps: 3
+  obstacle_laps: [1, 2, 3]
+  # Halfway along the planned RAW_MATERIAL -> CNC_CELL path (4.7 m of 9.3 m), before the speed zone.
+  obstacle: {leg: CNC_CELL, x: 7.71, y: -0.60, spawn_distance: 3.0}

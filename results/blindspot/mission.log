@@ -1,0 +1,91 @@
+FACTORYRUNNER | JOB-001 | run 20261026-212819
+[INFO] [1793050110.582269195] [factoryrunner_mission]: Nav2 is ready for use!
+[INFO] [1793050110.583021684] [factoryrunner_mission]: Navigating to goal: 4.5 -4.0...
+[1/4] Goal accepted: RAW_MATERIAL (4.50, -4.00)
+       7.05 m to go, recoveries 0
+       7.05 m to go, recoveries 0
+       6.95 m to go, recoveries 0
+       6.26 m to go, recoveries 0
+       5.82 m to go, recoveries 0
+       5.34 m to go, recoveries 0
+       5.12 m to go, recoveries 0
+       4.66 m to go, recoveries 0
+       4.29 m to go, recoveries 0
+       3.78 m to go, recoveries 0
+       3.13 m to go, recoveries 0
+       2.70 m to go, recoveries 0
+       2.22 m to go, recoveries 0
+       1.74 m to go, recoveries 0
+       1.29 m to go, recoveries 0
+       0.82 m to go, recoveries 0
+       0.37 m to go, recoveries 0
+[1/4] RAW_MATERIAL: SUCCEEDED in 19.2 s
+[INFO] [1793050131.608302978] [factoryrunner_mission]: Navigating to goal: 12.0 1.28...
+[2/4] Goal accepted: CNC_CELL (12.00, 1.28)
+       9.93 m to go, recoveries 0
+       9.69 m to go, recoveries 0
+       9.11 m to go, recoveries 0
+       8.73 m to go, recoveries 0
+       8.16 m to go, recoveries 0
+       7.71 m to go, recoveries 0
+       7.42 m to go, recoveries 0
+       6.94 m to go, recoveries 0
+       6.41 m to go, recoveries 0
+       5.97 m to go, recoveries 0
+       5.46 m to go, recoveries 0
+       5.29 m to go, recoveries 0
+       4.87 m to go, recoveries 0
+       4.65 m to go, recoveries 0
+       4.18 m to go, recoveries 0
+       3.81 m to go, recoveries 0
+       3.71 m to go, recoveries 0
+       3.74 m to go, recoveries 0
+       3.84 m to go, recoveries 0
+       4.34 m to go, recoveries 0
+       4.68 m to go, recoveries 0
+       5.26 m to go, recoveries 0
+       4.96 m to go, recoveries 0
+       3.02 m to go, recoveries 0
+       3.31 m to go, recoveries 0
+       4.04 m to go, recoveries 0
+       5.06 m to go, recoveries 0
+       1.21 m to go, recoveries 0
+       1.14 m to go, recoveries 0
+       1.15 m to go, recoveries 0
+       1.81 m to go, recoveries 0
+       2.03 m to go, recoveries 0
+       1.63 m to go, recoveries 0
+       1.21 m to go, recoveries 0
+       0.88 m to go, recoveries 0
+       0.83 m to go, recoveries 0
+       1.39 m to go, recoveries 1
+       1.29 m to go, recoveries 1
+       1.23 m to go, recoveries 1
+       1.03 m to go, recoveries 1
+       0.95 m to go, recoveries 1
+       0.83 m to go, recoveries 1
+       0.88 m to go, recoveries 1
+       0.97 m to go, recoveries 1
+       1.17 m to go, recoveries 1
+       1.21 m to go, recoveries 1
+       1.26 m to go, recoveries 1
+       1.22 m to go, recoveries 1
+       1.31 m to go, recoveries 2
+       1.24 m to go, recoveries 2
+       1.16 m to go, recoveries 2
+       1.01 m to go, recoveries 2
+       1.03 m to go, recoveries 2
+       0.88 m to go, recoveries 2
+       0.82 m to go, recoveries 2
+       0.65 m to go, recoveries 2
+       0.66 m to go, recoveries 2
+       0.58 m to go, recoveries 2
+       0.29 m to go, recoveries 2
+       0.44 m to go, recoveries 2
+[2/4] CNC_CELL: FAILED in 62.6 s
+
+MISSION FAILED
+Goals succeeded: 1/4
+Elapsed sim time: 81.8 s
+Logged to /home/nethi/fr_ws/src/factoryrunner-nav2/.planning/task20/missions/missions.csv
+[ros2run]: Process exited with failure 1
