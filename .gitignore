@@ -1,0 +1,15 @@
+build/
+install/
+log/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# rosbags and tuning databases stay local; only CSVs and plots go in results/
+*.db3
+*.mcap
+rosbag*/
+results/*.db
+results/bags/
+
+.vscode/
