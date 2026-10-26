@@ -10,6 +10,8 @@ python3 scripts/plot_results.py --speed-csv results/speed_profile_<run>.csv
 bag itself stays out of git) and plots results/speed_profile.png; --speed-csv replots that CSV.
 --window START END limits the profile plot to that span, e.g. one lap's start_s and end_s
 from the trials CSV (sim seconds, when the bag recorded /clock).
+--sweep DIR plots an obstacle_sweep.sh run as results/obstacle_sweep.png; add --trials to draw
+the no-pallet CNC_CELL legs from that run as the reference band.
 """
 
 import argparse
@@ -187,6 +189,56 @@ def plot_speed_profile(profile_csv, out_png, window=None, title_note=''):
     plt.close(fig)
 
 
+def load_sweep(sweep_dir, leg_station='CNC_CELL'):
+    """Return {drop distance: [CNC leg rows]} from an obstacle_sweep.sh output directory."""
+    legs = {}
+    for csv_path in sorted(Path(sweep_dir).glob('d*/trials_*.csv')):
+        distance = float(csv_path.parent.name[1:])
+        with open(csv_path, newline='') as f:
+            legs.setdefault(distance, []).extend(
+                r for r in csv.DictReader(f) if r['station'] == leg_station)
+    return legs
+
+
+def plot_sweep(legs, out_png, reference=None):
+    """Three panels against drop distance: leg time, closest return, slowdown + stop time."""
+    distances = sorted(legs, reverse=True)
+    panels = [
+        ('CNC_CELL leg time (sim s)', lambda r: float(r['duration_s'])),
+        ('Closest scan return (m)', lambda r: float(r['min_clearance_m'])),
+        ('Slowdown + stop time (s)', lambda r: float(r['slowdown_s']) + float(r['stop_s'])),
+    ]
+    fig, axes = plt.subplots(1, 3, figsize=(10, 3.4), dpi=150)
+    for ax, (label, value) in zip(axes, panels):
+        _style(ax)
+        if reference:
+            ref = [value(r) for r in reference]
+            ax.axhspan(min(ref), max(ref), color=ZONE_SHADE, alpha=0.5, linewidth=0)
+        for i, d in enumerate(distances):
+            ys = [value(r) for r in legs[d]]
+            ax.scatter([i] * len(ys), ys, s=26, color=OBSTACLE, zorder=3)
+            ax.hlines(statistics.median(ys), i - 0.2, i + 0.2, color=INK, linewidth=1.5, zorder=4)
+            failed = sum(r['result'] != 'SUCCEEDED' for r in legs[d])
+            if failed:
+                ax.annotate(f'{failed} failed', (i, max(ys)), textcoords='offset points',
+                            xytext=(0, 6), ha='center', fontsize=7, color=INK)
+        if label.startswith('Slowdown'):
+            top = max((value(r) for d in distances for r in legs[d]), default=0.0)
+            ax.set_ylim(0, max(1.0, top * 1.15))
+        ax.set_xticks(range(len(distances)))
+        ax.set_xticklabels([f'{d:g} m' for d in distances])
+        ax.set_xlabel('Pallet dropped when robot is', color=MUTED, fontsize=8)
+        ax.set_title(label, loc='left', color=INK, fontsize=9)
+    handles = [plt.Line2D([], [], marker='o', linestyle='', color=OBSTACLE, label='One lap'),
+               plt.Line2D([], [], color=INK, linewidth=1.5, label='Median')]
+    if reference:
+        handles.append(Patch(color=ZONE_SHADE, alpha=0.5, label='Range without a pallet'))
+    fig.legend(handles=handles, frameon=False, fontsize=8, loc='lower left', ncol=3)
+    fig.tight_layout(rect=(0, 0.08, 1, 1))
+    fig.savefig(out_png)
+    plt.close(fig)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description='Plot trial results for the README.')
     parser.add_argument('--trials', type=Path, help='trials_<run>.csv from trial_runner')
@@ -195,13 +247,24 @@ def main(argv=None):
     parser.add_argument('--window', type=float, nargs=2, metavar=('START', 'END'),
                         help='only plot the profile between these times')
     parser.add_argument('--title-note', default='', help='appended to the profile title')
+    parser.add_argument('--sweep', type=Path, help='an obstacle_sweep.sh output directory')
     parser.add_argument('--out-dir', type=Path, default=Path('results'))
     args = parser.parse_args(argv)
-    if not (args.trials or args.bag or args.speed_csv):
-        parser.error('give --trials, --bag or --speed-csv')
+    if not (args.trials or args.bag or args.speed_csv or args.sweep):
+        parser.error('give --trials, --bag, --speed-csv or --sweep')
     matplotlib.use('Agg')  # files only; no window even when a display is available
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
+    if args.sweep:
+        reference = None
+        if args.trials:
+            with open(args.trials, newline='') as f:
+                reference = [r for r in csv.DictReader(f)
+                             if r['station'] == 'CNC_CELL' and r['obstacle'] == '0']
+        out = args.out_dir / 'obstacle_sweep.png'
+        plot_sweep(load_sweep(args.sweep), out, reference)
+        print(f'wrote {out}')
+        return 0
     if args.trials:
         out = args.out_dir / 'lap_durations.png'
         plot_lap_durations(load_laps(args.trials), out)
