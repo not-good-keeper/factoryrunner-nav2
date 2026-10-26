@@ -1,0 +1,33 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-24.04
+    container: ros:jazzy
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: src/factoryrunner-nav2
+      - name: Install dependencies
+        run: |
+          apt-get update
+          rosdep update
+          rosdep install --from-paths src --ignore-src -y --rosdistro jazzy
+          apt-get install -y python3-pytest python3-flake8
+      - name: Lint
+        run: flake8 src/factoryrunner-nav2
+      - name: Build
+        shell: bash
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          colcon build --symlink-install
+      - name: Unit tests
+        shell: bash
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          source install/setup.bash
+          python3 -m pytest -q src/factoryrunner-nav2/test
