@@ -30,7 +30,7 @@ def leg_row(run_id, job_id, leg, station, result, start_s, end_s, recoveries):
     }
 
 
-def append_row(csv_path, row):
+def append_row(csv_path, row, fields=CSV_FIELDS):
     """Append one leg, writing the header first if the file is new or empty.
 
     Called after every leg so a run that is killed mid-mission keeps the legs it finished.
@@ -38,7 +38,7 @@ def append_row(csv_path, row):
     csv_path.parent.mkdir(parents=True, exist_ok=True)
     needs_header = not csv_path.exists() or csv_path.stat().st_size == 0
     with csv_path.open('a', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=CSV_FIELDS)
+        writer = csv.DictWriter(f, fieldnames=fields)
         if needs_header:
             writer.writeheader()
         writer.writerow(row)

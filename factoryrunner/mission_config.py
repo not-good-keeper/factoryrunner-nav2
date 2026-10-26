@@ -25,6 +25,14 @@ class Station:
 
 
 @dataclass(frozen=True)
+class ObstacleConfig:
+    leg_station: str  # the box goes on the leg that ends at this station
+    x: float
+    y: float
+    spawn_distance: float = 3.0  # spawn once the robot is this close to (x, y)
+
+
+@dataclass(frozen=True)
 class MissionConfig:
     job_id: str
     frame_id: str
@@ -32,6 +40,7 @@ class MissionConfig:
     stations: list
     laps: int = 1
     obstacle_laps: list = field(default_factory=list)
+    obstacle: ObstacleConfig = None
 
 
 def _number(raw, where):
@@ -53,6 +62,26 @@ def _pose(raw, where):
         x=_number(raw['x'], f'{where}.x'),
         y=_number(raw['y'], f'{where}.y'),
         yaw=_number(raw.get('yaw', 0.0), f'{where}.yaw'),
+    )
+
+
+def _obstacle(raw, station_names):
+    where = 'mission.obstacle'
+    if not isinstance(raw, dict):
+        raise MissionConfigError(f'{where} must be a mapping with leg, x, y')
+    missing = {'leg', 'x', 'y'} - raw.keys()
+    if missing:
+        raise MissionConfigError(f'{where} is missing {sorted(missing)}')
+    if raw['leg'] not in station_names:
+        raise MissionConfigError(f"{where}.leg {raw['leg']!r} is not a station name")
+    spawn_distance = _number(raw.get('spawn_distance', 3.0), f'{where}.spawn_distance')
+    if spawn_distance <= 0:
+        raise MissionConfigError(f'{where}.spawn_distance must be positive, got {spawn_distance}')
+    return ObstacleConfig(
+        leg_station=raw['leg'],
+        x=_number(raw['x'], f'{where}.x'),
+        y=_number(raw['y'], f'{where}.y'),
+        spawn_distance=spawn_distance,
     )
 
 
@@ -90,6 +119,12 @@ def parse_mission(doc):
         if isinstance(lap, bool) or not isinstance(lap, int) or not 1 <= lap <= laps:
             raise MissionConfigError(f'obstacle lap {lap!r} is outside 1..{laps}')
 
+    obstacle = None
+    if m.get('obstacle') is not None:
+        obstacle = _obstacle(m['obstacle'], seen)
+    elif obstacle_laps:
+        raise MissionConfigError('mission.obstacle_laps is set but mission.obstacle is not')
+
     return MissionConfig(
         job_id=str(m.get('job_id', 'JOB-001')),
         frame_id=str(m.get('frame_id', 'map')),
@@ -97,6 +132,7 @@ def parse_mission(doc):
         stations=stations,
         laps=laps,
         obstacle_laps=sorted(set(obstacle_laps)),
+        obstacle=obstacle,
     )
 
 

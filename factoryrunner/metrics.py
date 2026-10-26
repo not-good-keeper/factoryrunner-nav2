@@ -2,6 +2,10 @@
 
 import math
 
+# nav2_msgs/CollisionMonitorState action_type values
+MONITOR_STOP = 1
+MONITOR_SLOWDOWN = 2
+
 
 def path_length(points):
     """Sum of straight segments between consecutive (x, y) samples."""
@@ -34,3 +38,30 @@ def time_in_state(transitions, state, end_time):
         if current == state:
             held += until - stamp
     return held
+
+
+def in_speed_zone(speed_limit):
+    """Return True if a percentage /speed_limit value means the robot is being slowed.
+
+    The speed filter publishes 0 for "no limit" and 100 means full speed, so only values in
+    between count as being in a zone.
+    """
+    return 0.0 < speed_limit < 100.0
+
+
+def leg_metrics(start, end, positions, clearances, monitor_transitions, zone_transitions):
+    """Compute the per-leg numbers for the trials CSV.
+
+    positions are time-ordered (x, y) samples, clearances the per-scan minimum ranges (None for
+    a scan with no valid return), monitor_transitions (stamp, action_type) changes and
+    zone_transitions (stamp, in_zone) changes, each starting with the state at `start`.
+    """
+    valid = [c for c in clearances if c is not None]
+    return {
+        'duration_s': end - start,
+        'path_length_m': path_length(positions),
+        'min_clearance_m': min(valid) if valid else None,
+        'slowdown_s': time_in_state(monitor_transitions, MONITOR_SLOWDOWN, end),
+        'stop_s': time_in_state(monitor_transitions, MONITOR_STOP, end),
+        'speed_zone_s': time_in_state(zone_transitions, True, end),
+    }

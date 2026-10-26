@@ -71,3 +71,31 @@ def test_bad_yaml(tmp_path):
     bad.write_text('mission: [unclosed')
     with pytest.raises(MissionConfigError, match='not valid YAML'):
         load_mission(bad)
+
+
+def test_obstacle_block_parsed():
+    cfg = parse_mission(_doc(laps=3, obstacle_laps=[2],
+                             obstacle={'leg': 'B', 'x': 2.5, 'y': -1, 'spawn_distance': 2}))
+    assert cfg.obstacle.leg_station == 'B'
+    assert (cfg.obstacle.x, cfg.obstacle.y, cfg.obstacle.spawn_distance) == (2.5, -1.0, 2.0)
+
+
+def test_obstacle_defaults_spawn_distance():
+    cfg = parse_mission(_doc(obstacle={'leg': 'A', 'x': 0, 'y': 0}))
+    assert cfg.obstacle.spawn_distance == 3.0
+
+
+def test_obstacle_laps_need_obstacle_block():
+    with pytest.raises(MissionConfigError, match='mission.obstacle'):
+        parse_mission(_doc(laps=2, obstacle_laps=[1]))
+
+
+@pytest.mark.parametrize('obstacle, message', [
+    ({'leg': 'C', 'x': 0, 'y': 0}, 'not a station'),
+    ({'leg': 'A', 'x': 0}, 'missing'),
+    ({'leg': 'A', 'x': 0, 'y': 0, 'spawn_distance': 0}, 'positive'),
+    ('A', 'mapping'),
+])
+def test_bad_obstacle_block(obstacle, message):
+    with pytest.raises(MissionConfigError, match=message):
+        parse_mission(_doc(obstacle=obstacle))

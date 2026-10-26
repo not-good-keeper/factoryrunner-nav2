@@ -41,6 +41,14 @@ def sim_seconds(navigator):
     return navigator.get_clock().now().nanoseconds / 1e9
 
 
+def warn_unless_cyclone(navigator):
+    if os.environ.get('RMW_IMPLEMENTATION') != 'rmw_cyclonedds_cpp':
+        # Nav2's container froze under the default Fast DDS here; see docs/CHALLENGES.md.
+        navigator.get_logger().warn(
+            'RMW_IMPLEMENTATION is not rmw_cyclonedds_cpp; '
+            'run: export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp')
+
+
 def cancel_leg(navigator):
     """Cancel the active goal, giving up after CANCEL_WAIT_S.
 
@@ -54,7 +62,12 @@ def cancel_leg(navigator):
     return future.done()
 
 
-def run_leg(navigator, mission, leg, station, leg_timeout_s):
+def run_leg(navigator, mission, leg, station, leg_timeout_s, on_tick=None):
+    """Drive one leg and return (result, start_s, end_s, recoveries).
+
+    on_tick, if given, is called on every pass of the wait loop; the trial runner uses it to
+    drop the obstacle in when the robot gets close.
+    """
     total = len(mission.stations)
     goal = to_pose_stamped(navigator, station.pose, mission.frame_id)
     start = sim_seconds(navigator)
@@ -75,6 +88,8 @@ def run_leg(navigator, mission, leg, station, leg_timeout_s):
                 print(f'      cancel not acknowledged within {CANCEL_WAIT_S:.0f} s; '
                       'Nav2 may be frozen')
             return TaskResult.CANCELED, start, sim_seconds(navigator), recoveries
+        if on_tick is not None:
+            on_tick()
         feedback = navigator.getFeedback()
         if feedback is None:
             continue
@@ -92,11 +107,7 @@ def main(argv=None):
     rclpy.init(args=argv if argv is not None else sys.argv)
     navigator = BasicNavigator('factoryrunner_mission')
     navigator.set_parameters([Parameter('use_sim_time', Parameter.Type.BOOL, True)])
-    if os.environ.get('RMW_IMPLEMENTATION') != 'rmw_cyclonedds_cpp':
-        # Nav2's container froze under the default Fast DDS here; see docs/CHALLENGES.md.
-        navigator.get_logger().warn(
-            'RMW_IMPLEMENTATION is not rmw_cyclonedds_cpp; '
-            'run: export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp')
+    warn_unless_cyclone(navigator)
 
     default_mission = Path(get_package_share_directory('factoryrunner')) / 'config' / 'mission.yaml'
     mission_file = navigator.declare_parameter('mission_file', str(default_mission)).value
