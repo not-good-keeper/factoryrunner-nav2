@@ -7,6 +7,7 @@ ros2 run factoryrunner mission_controller --ros-args -p mission_file:=/path/to/m
 import csv
 from datetime import datetime
 import math
+import os
 from pathlib import Path
 import sys
 
@@ -78,6 +79,11 @@ def main(argv=None):
     rclpy.init(args=argv if argv is not None else sys.argv)
     navigator = BasicNavigator('factoryrunner_mission')
     navigator.set_parameters([Parameter('use_sim_time', Parameter.Type.BOOL, True)])
+    if os.environ.get('RMW_IMPLEMENTATION') != 'rmw_cyclonedds_cpp':
+        # Nav2's container froze under the default Fast DDS here; see docs/CHALLENGES.md.
+        navigator.get_logger().warn(
+            'RMW_IMPLEMENTATION is not rmw_cyclonedds_cpp; '
+            'run: export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp')
 
     default_mission = Path(get_package_share_directory('factoryrunner')) / 'config' / 'mission.yaml'
     mission_file = navigator.declare_parameter('mission_file', str(default_mission)).value
