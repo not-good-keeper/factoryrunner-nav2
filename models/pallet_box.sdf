@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<!-- Unmapped obstacle the trial runner drops into an aisle mid-run. Tall enough
+     that the 2D lidar at ~0.17 m height always hits it. -->
+<sdf version="1.9">
+  <model name="pallet_box">
+    <static>true</static>
+    <link name="body">
+      <collision name="collision">
+        <geometry>
+          <box><size>0.5 0.5 0.5</size></box>
+        </geometry>
+      </collision>
+      <visual name="visual">
+        <geometry>
+          <box><size>0.5 0.5 0.5</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.45 0.1 1</ambient>
+          <diffuse>0.8 0.45 0.1 1</diffuse>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>
