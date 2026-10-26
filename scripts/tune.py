@@ -12,7 +12,8 @@ study     TPE sampler (seed 42), SQLite storage at results/tuning.db. The first 
           planner and controller are untouched apart from these values.
 validate  Alternates default and best parameters lap by lap, with the pallet at a spot the
           study never saw, and writes results/validation_<run>.csv.
-report    Writes results/tuning_history.png and prints the validation table.
+report    Writes results/tuning_history.png and results/tuning_study.csv (tuning.db stays out
+          of git) and prints the validation table.
 """
 
 import argparse
@@ -165,6 +166,8 @@ def cmd_report(args):
     import matplotlib.pyplot as plt
     import optuna
 
+    from factoryrunner.tuning import SEARCH_SPACE
+
     matplotlib.use('Agg')
     study = optuna.load_study(study_name=STUDY_NAME, storage=args.storage)
     done = [t for t in study.trials if t.value is not None]
@@ -191,6 +194,18 @@ def cmd_report(args):
     out = RESULTS / 'tuning_history.png'
     fig.savefig(out)
     print(f'wrote {out} ({len(done)} trials, best {study.best_value:.1f})')
+    study_csv = RESULTS / 'tuning_study.csv'
+    names = [p.name for p in SEARCH_SPACE]
+    with open(study_csv, 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['trial', 'state', 'objective', 'lap_time_s', 'failed_legs'] + names)
+        for t in study.trials:
+            writer.writerow([t.number, t.state.name,
+                             '' if t.value is None else f'{t.value:.2f}',
+                             f'{t.user_attrs.get("lap_time_s", float("nan")):.2f}',
+                             t.user_attrs.get('failed_legs', '')]
+                            + [f'{t.params[n]:.4f}' if n in t.params else '' for n in names])
+    print(f'wrote {study_csv}')
     print(f'best params: {study.best_params}')
 
     validation = sorted(RESULTS.glob('validation_*.csv'))

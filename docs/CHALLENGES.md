@@ -58,3 +58,10 @@ Runs in `results/missions.csv` (all headless):
 - **Symptom:** `trials_20261026-193027.csv` stops at lap 9, leg 3, and the trial runner ended in an `ExternalShutdownException` traceback.
 - **Cause:** my own test script started every run under `timeout 900`, a 15-minute cap meant for single missions; ten laps take about 16 minutes, so `timeout` signalled the runner mid-leg. Nav2 was fine: all 35 legs it finished had succeeded.
 - **Fix:** longer cap for multi-lap runs, and `trial_runner` now reports where the finished legs are and exits with 130 instead of a traceback. The file stays in `results/` as an interrupted run; the complete run is `trials_20261026-194747.csv` (10 laps, 40/40 legs succeeded, pallet on laps 3, 6 and 9).
+
+## 2026-10-27 — One tuning trial ran without its pallet
+
+- **Symptom:** in the D13 study, trial 16 logged `obstacle spawn failed: ... ros_gz_sim create ... timed out after 30 seconds`, and its CNC_CELL row has `obstacle=failed`.
+- **What it means for the study:** that lap measured the parameters without the obstacle, so its objective (95.8) is not comparable with the others. It was not the best trial and was not used for validation; the best trial (23, objective 88.7) had its pallet. The TPE sampler still learned from trial 16, which may have nudged later samples slightly.
+- **Cause:** not found. The same command spawned the pallet in the other 24 trials and in every earlier run, typically in under a second. `ros2 run` starts a Python process and a ROS node for each spawn, so a slow DDS discovery or a stall on a busy machine is the likely suspect. UNVERIFIED.
+- **Handling:** the trial runner already records the failure in the CSV instead of hiding it, which is how it was caught. A retry, or spawning through Gazebo's in-process transport as the moving obstacle does, would make it more robust; not done before the freeze.
