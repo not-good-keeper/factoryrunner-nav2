@@ -16,7 +16,8 @@ import sys
 
 from ament_index_python.packages import get_package_share_directory
 from factoryrunner.mission_config import load_mission, MissionConfigError
-from factoryrunner.mission_log import append_row, check_leg_timeout, leg_row, leg_timed_out
+from factoryrunner.mission_log import (append_row, check_leg_timeout, default_results_dir,
+                                       leg_row, leg_timed_out)
 from geometry_msgs.msg import PoseStamped
 from nav2_simple_commander.robot_navigator import BasicNavigator, TaskResult
 import rclpy
@@ -109,9 +110,11 @@ def main(argv=None):
     navigator.set_parameters([Parameter('use_sim_time', Parameter.Type.BOOL, True)])
     warn_unless_cyclone(navigator)
 
-    default_mission = Path(get_package_share_directory('factoryrunner')) / 'config' / 'mission.yaml'
+    share = Path(get_package_share_directory('factoryrunner'))
+    default_mission = share / 'config' / 'mission.yaml'
     mission_file = navigator.declare_parameter('mission_file', str(default_mission)).value
-    results_dir = navigator.declare_parameter('results_dir', str(Path.cwd() / 'results')).value
+    results_dir = navigator.declare_parameter(
+        'results_dir', str(default_results_dir(share))).value
     leg_timeout_s = navigator.declare_parameter('leg_timeout_s', 120.0).value
 
     try:

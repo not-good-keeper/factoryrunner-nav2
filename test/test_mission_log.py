@@ -1,8 +1,8 @@
 import csv
 import math
 
-from factoryrunner.mission_log import (append_row, check_leg_timeout, CSV_FIELDS, leg_row,
-                                       leg_timed_out)
+from factoryrunner.mission_log import (append_row, check_leg_timeout, CSV_FIELDS,
+                                       default_results_dir, leg_row, leg_timed_out)
 import pytest
 
 
@@ -57,3 +57,21 @@ def test_check_leg_timeout_accepts_int():
 def test_check_leg_timeout_rejects(bad):
     with pytest.raises(ValueError):
         check_leg_timeout(bad)
+
+
+def test_results_dir_follows_symlinked_config_into_checkout(tmp_path):
+    repo = tmp_path / 'src' / 'factoryrunner-nav2'
+    (repo / 'config').mkdir(parents=True)
+    (repo / '.git').mkdir()
+    (repo / 'package.xml').touch()
+    share = tmp_path / 'install' / 'share' / 'factoryrunner'
+    share.mkdir(parents=True)
+    (share / 'config').symlink_to(repo / 'config')
+    assert default_results_dir(share) == repo.resolve() / 'results'
+
+
+def test_results_dir_falls_back_to_cwd_for_plain_install(tmp_path, monkeypatch):
+    share = tmp_path / 'share' / 'factoryrunner'
+    (share / 'config').mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+    assert default_results_dir(share) == tmp_path / 'results'

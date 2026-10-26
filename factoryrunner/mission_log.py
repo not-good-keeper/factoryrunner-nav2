@@ -2,9 +2,22 @@
 
 import csv
 import math
+from pathlib import Path
 
 CSV_FIELDS = ['run_id', 'job_id', 'leg', 'station', 'result',
               'start_s', 'end_s', 'duration_s', 'recoveries']
+
+
+def default_results_dir(share_dir):
+    """Return results/ in the source checkout, so runs land in the repo wherever they start.
+
+    With colcon's --symlink-install (what the README uses) the installed config/ links back
+    into the checkout. A plain install has no checkout to find, so fall back to ./results.
+    """
+    repo = (Path(share_dir) / 'config').resolve().parent
+    if (repo / 'package.xml').is_file() and (repo / '.git').exists():
+        return repo / 'results'
+    return Path.cwd() / 'results'
 
 
 def check_leg_timeout(value):
