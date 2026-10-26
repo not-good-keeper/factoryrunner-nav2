@@ -16,7 +16,7 @@ jobs:
         run: |
           apt-get update
           rosdep update
-          rosdep install --from-paths src --ignore-src -y --rosdistro jazzy
+          rosdep install --from-paths src src/factoryrunner-nav2/factoryrunner_vision --ignore-src -y --rosdistro jazzy
           apt-get install -y python3-pytest python3-flake8
       - name: Lint
         # flake8 7 reads config only from the working directory, so name the repo's setup.cfg
@@ -25,10 +25,13 @@ jobs:
         shell: bash
         run: |
           source /opt/ros/jazzy/setup.bash
-          colcon build --symlink-install
+          # factoryrunner_vision is nested in the Python package, where colcon's search stops
+          colcon build --symlink-install --base-paths src src/factoryrunner-nav2/factoryrunner_vision
       - name: Unit tests
         shell: bash
         run: |
           source /opt/ros/jazzy/setup.bash
           source install/setup.bash
           python3 -m pytest -q src/factoryrunner-nav2/test
+          colcon test --base-paths src src/factoryrunner-nav2/factoryrunner_vision --packages-select factoryrunner_vision
+          colcon test-result --test-result-base build/factoryrunner_vision --verbose

@@ -2,6 +2,7 @@
 
 ros2 run factoryrunner obstacle spawn --x 8.0 --y -1.0     (map-frame metres)
 ros2 run factoryrunner obstacle remove
+ros2 run factoryrunner obstacle spawn --x 6.5 --y -1.6 --model low_box --name crate
 
 Gazebo answers create and remove as soon as the request is queued: a duplicate name or a
 missing entity still gets a success reply, and the real error only shows up in the Gazebo
@@ -19,7 +20,8 @@ WORLD = 'depot'
 # map is not rotated against the world, so the frames differ by this translation only.
 MAP_ORIGIN_IN_GAZEBO = (-8.0, 0.0)
 DEFAULT_NAME = 'pallet_box'
-SPAWN_Z = 0.25  # half the box height, so it sits on the floor
+# Half of each model's height, so it sits on the floor.
+SPAWN_Z = {'pallet_box': 0.25, 'low_box': 0.05}
 COMMAND_TIMEOUT_S = 30
 
 
@@ -31,10 +33,10 @@ def map_to_gazebo(x, y):
     return x + MAP_ORIGIN_IN_GAZEBO[0], y + MAP_ORIGIN_IN_GAZEBO[1]
 
 
-def spawn_command(model_file, name, x, y, world=WORLD):
+def spawn_command(model_file, name, x, y, z, world=WORLD):
     gx, gy = map_to_gazebo(x, y)
     return ['ros2', 'run', 'ros_gz_sim', 'create', '-world', world, '-file', str(model_file),
-            '-name', name, '-x', f'{gx:.3f}', '-y', f'{gy:.3f}', '-z', f'{SPAWN_Z}']
+            '-name', name, '-x', f'{gx:.3f}', '-y', f'{gy:.3f}', '-z', f'{z}']
 
 
 def remove_command(name, world=WORLD):
@@ -50,11 +52,13 @@ def _run(cmd):
         raise ObstacleError(f'{cmd[0]} failed: {exc}') from exc
 
 
-def spawn(name, x, y):
+def spawn(name, x, y, model='pallet_box'):
     from ament_index_python.packages import get_package_share_directory
 
-    model = Path(get_package_share_directory('factoryrunner')) / 'models' / 'pallet_box.sdf'
-    proc = _run(spawn_command(model, name, x, y))
+    if model not in SPAWN_Z:
+        raise ObstacleError(f'unknown model {model!r}; known: {sorted(SPAWN_Z)}')
+    path = Path(get_package_share_directory('factoryrunner')) / 'models' / f'{model}.sdf'
+    proc = _run(spawn_command(path, name, x, y, SPAWN_Z[model]))
     if proc.returncode != 0:
         raise ObstacleError(f'spawning {name} failed: {(proc.stderr or proc.stdout).strip()}')
 
@@ -73,13 +77,14 @@ def main(argv=None):
     add.add_argument('--x', type=float, required=True)
     add.add_argument('--y', type=float, required=True)
     add.add_argument('--name', default=DEFAULT_NAME)
+    add.add_argument('--model', default='pallet_box', choices=sorted(SPAWN_Z))
     rm = sub.add_parser('remove', help='remove a spawned box')
     rm.add_argument('--name', default=DEFAULT_NAME)
     args = parser.parse_args(argv)
 
     try:
         if args.action == 'spawn':
-            spawn(args.name, args.x, args.y)
+            spawn(args.name, args.x, args.y, args.model)
             print(f'requested {args.name} at map ({args.x:.2f}, {args.y:.2f})')
         else:
             remove(args.name)

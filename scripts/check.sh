@@ -28,12 +28,18 @@ echo '== lint'
 python3 -m flake8 --config "$pkg/setup.cfg" src/factoryrunner-nav2
 
 echo '== build'
-colcon build --symlink-install --event-handlers console_cohesion- summary+
+# factoryrunner_vision sits inside the Python package's directory, where colcon's search
+# stops, so it is named as a base path of its own.
+colcon build --symlink-install --base-paths src src/factoryrunner-nav2/factoryrunner_vision \
+    --event-handlers console_cohesion- summary+
 
 echo '== unit tests'
 set +u
 source install/setup.bash
 set -u
 python3 -m pytest -q src/factoryrunner-nav2/test
+colcon test --base-paths src src/factoryrunner-nav2/factoryrunner_vision \
+    --packages-select factoryrunner_vision --event-handlers console_cohesion- summary+
+colcon test-result --test-result-base build/factoryrunner_vision --verbose
 
 echo '== all checks passed'
