@@ -1,0 +1,17 @@
+# Allowlist: the image only needs the package sources.
+*
+!config
+!factoryrunner
+!factoryrunner_vision
+!launch
+!maps
+!models
+!resource
+!scripts
+!test
+!LICENSE
+!README.md
+!package.xml
+!setup.cfg
+!setup.py
+**/__pycache__
