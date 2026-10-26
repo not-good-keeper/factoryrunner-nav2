@@ -28,6 +28,7 @@ setup(
             'mission_controller = factoryrunner.mission_controller:main',
             'obstacle = factoryrunner.obstacle:main',
             'trial_runner = factoryrunner.trial_runner:main',
+            'health_monitor = factoryrunner.health_monitor:main',
         ],
     },
 )
