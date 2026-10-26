@@ -26,6 +26,7 @@ setup(
     entry_points={
         'console_scripts': [
             'mission_controller = factoryrunner.mission_controller:main',
+            'obstacle = factoryrunner.obstacle:main',
         ],
     },
 )
