@@ -16,6 +16,7 @@ import time
 
 from ament_index_python.packages import get_package_share_directory
 from factoryrunner import obstacle
+from factoryrunner.crossing import crossing_positions, CrossingMover
 from factoryrunner.metrics import in_speed_zone, leg_metrics, min_clearance
 from factoryrunner.mission_config import load_mission, MissionConfigError
 from factoryrunner.mission_controller import (run_leg, sim_seconds, to_pose_stamped,
@@ -97,6 +98,8 @@ class ObstacleDrop:
         self._recorder = recorder
         self._spot = (cfg.x, cfg.y)
         self._spawn_distance = cfg.spawn_distance
+        self._motion = cfg.motion
+        self._mover = None
         self.name = name
         self.spawned = False
         self.failed = False
@@ -122,10 +125,19 @@ class ObstacleDrop:
             return
         self.spawned = True
         self.spawn_wall_s = time.monotonic() - before
+        if self._motion is not None:
+            path = crossing_positions(self._spot, (self._motion.to_x, self._motion.to_y),
+                                      self._motion.speed)
+            self._mover = CrossingMover(self.name, path)
+            self._mover.start()
         print(f'      dropped {self.name} at ({self._spot[0]:.2f}, {self._spot[1]:.2f}), '
               f'robot {dist:.2f} m away')
 
     def remove(self):
+        if self._mover is not None:
+            self._mover.stop()
+            self._mover.join(timeout=2.0)
+            self._mover = None
         if not self.spawned:
             return
         try:

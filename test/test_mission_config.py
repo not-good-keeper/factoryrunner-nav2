@@ -99,3 +99,16 @@ def test_obstacle_laps_need_obstacle_block():
 def test_bad_obstacle_block(obstacle, message):
     with pytest.raises(MissionConfigError, match=message):
         parse_mission(_doc(obstacle=obstacle))
+
+
+def test_obstacle_motion_parsed():
+    cfg = parse_mission(_doc(obstacle={'leg': 'B', 'x': 1, 'y': 2, 'motion':
+                                       {'to_x': 3, 'to_y': 4, 'speed': 0.25}}))
+    assert (cfg.obstacle.motion.to_x, cfg.obstacle.motion.to_y) == (3.0, 4.0)
+    assert cfg.obstacle.motion.speed == 0.25
+
+
+@pytest.mark.parametrize('motion', [{'to_x': 1, 'to_y': 1}, {'to_x': 1, 'to_y': 1, 'speed': 0}])
+def test_bad_obstacle_motion(motion):
+    with pytest.raises(MissionConfigError, match='motion'):
+        parse_mission(_doc(obstacle={'leg': 'A', 'x': 0, 'y': 0, 'motion': motion}))

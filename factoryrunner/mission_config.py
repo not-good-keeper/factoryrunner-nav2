@@ -25,11 +25,19 @@ class Station:
 
 
 @dataclass(frozen=True)
+class ObstacleMotion:
+    to_x: float
+    to_y: float
+    speed: float  # m/s
+
+
+@dataclass(frozen=True)
 class ObstacleConfig:
     leg_station: str  # the box goes on the leg that ends at this station
     x: float
     y: float
     spawn_distance: float = 3.0  # spawn once the robot is this close to (x, y)
+    motion: ObstacleMotion = None  # if set, the box then moves from (x, y) to (to_x, to_y)
 
 
 @dataclass(frozen=True)
@@ -77,11 +85,22 @@ def _obstacle(raw, station_names):
     spawn_distance = _number(raw.get('spawn_distance', 3.0), f'{where}.spawn_distance')
     if spawn_distance <= 0:
         raise MissionConfigError(f'{where}.spawn_distance must be positive, got {spawn_distance}')
+    motion = None
+    if raw.get('motion') is not None:
+        m = raw['motion']
+        if not isinstance(m, dict) or {'to_x', 'to_y', 'speed'} - m.keys():
+            raise MissionConfigError(f'{where}.motion needs to_x, to_y and speed')
+        speed = _number(m['speed'], f'{where}.motion.speed')
+        if speed <= 0:
+            raise MissionConfigError(f'{where}.motion.speed must be positive, got {speed}')
+        motion = ObstacleMotion(to_x=_number(m['to_x'], f'{where}.motion.to_x'),
+                                to_y=_number(m['to_y'], f'{where}.motion.to_y'), speed=speed)
     return ObstacleConfig(
         leg_station=raw['leg'],
         x=_number(raw['x'], f'{where}.x'),
         y=_number(raw['y'], f'{where}.y'),
         spawn_distance=spawn_distance,
+        motion=motion,
     )
 
 
