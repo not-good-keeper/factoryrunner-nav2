@@ -24,7 +24,7 @@ One entry per real problem: date, symptom, what I checked, what fixed it.
 - **Fix 2:** `default_server_timeout: 200` in `bt_navigator`.
 - **Result:** with both fixes, 3 consecutive headless missions completed 4/4 (sim time 95.3, 92.0 and 90.7 s), with one Gazebo server running and no acknowledgement timeouts in the logs.
 - **Test-harness problem found on the way:** one `gz sim` server ignored SIGTERM and stayed alive under the next five launches. Those runs are marked below and are not counted as the result. The stop step now escalates to SIGKILL and refuses to continue while any Gazebo or Nav2 process is left.
-- **Still open:** one Fast DDS run (162513) also failed leg 4 near the keepout lane with MPPI "Optimizer fail to compute path" before the container froze. It has not recurred under Cyclone. The keepout filter comes after the inflation layer in both costmaps, so the lane is not inflated; whether that caused the failure is UNVERIFIED. The mission controller sometimes stays alive after printing MISSION COMPLETE; that moves to the per-leg timeout task.
+- **Still open at the time:** one Fast DDS run (162513) also failed leg 4 near the keepout lane with MPPI "Optimizer fail to compute path" before the container froze. It recurred under Cyclone; see the next entry. The mission controller sometimes stays alive after printing MISSION COMPLETE; that moves to the per-leg timeout task.
 
 Runs in `results/missions.csv` (all headless):
 
@@ -38,3 +38,11 @@ Runs in `results/missions.csv` (all headless):
 | 20261026-164035 | Cyclone | 20 ms | leg 1 aborted on an acknowledgement timeout, stale Gazebo server alive |
 | 20261026-164746, -165226, -165651 | Cyclone | 200 ms | 4/4 each, stale Gazebo server alive |
 | 20261026-170336, -170600, -170819 | Cyclone | 200 ms | 4/4 each, one Gazebo server |
+
+## 2026-10-26 — Robot stuck on the keepout lane's corner
+
+- **Symptom:** on leg 4 (INSPECTION → DOCK), two runs stopped with exactly 4.01 m of path left: one under Fast DDS (162513) and one under Cyclone with both fixes above (171949). The controller logged `Optimizer fail to compute path` until `Controller patience exceeded`, and the spin recovery quit with `Collision Ahead`.
+- **Checked:** with the robot still stuck in the Cyclone run, `tf2_echo map base_link` gave (2.778, 2.503). The keepout lane covers x 2.0–2.8, y −2.5 to 2.5, so the robot's centre was 3 mm from the lane's corner and its 0.22 m radius overlapped lethal cells. MPPI treats every trajectory from there as a collision.
+- **Cause:** `keepout_filter` came after `inflation_layer` in both costmaps' plugin lists. The inflation layer only inflates what is lethal in the master grid when it runs, so walls got a 0.7 m inflation band and the lane got none. NavFn saw zero cost right up to the lane edge and planned along it; MPPI then cut the corner.
+- **Fix:** moved `keepout_filter` before `inflation_layer` in both costmaps. A probe of the live global costmap afterwards read (OccupancyGrid scale) 100 inside the lane; 99 at 0.1 m above its top edge and 0.2 m beside its side edge; 78 at 0.3 m above or below it; 58 at 0.4 m beside it; 43 at 0.5 m above it. I did not probe the old order, so there is no measured "before" value.
+- **Result:** 5 of 5 headless missions completed 4/4 (sim time 91.2–92.2 s) with no MPPI failures and no recoveries (runs 172350, 172606, 172815, 173029, 173237). Before the change it failed in 2 of the 11 runs that got as far as that corner on leg 4 (counting one GUI run on the user's machine), so 0 of 5 is consistent with a fix but is not yet strong evidence; the trial runs will add more.
