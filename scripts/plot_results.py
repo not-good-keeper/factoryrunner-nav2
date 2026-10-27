@@ -10,6 +10,9 @@ python3 scripts/plot_results.py --speed-csv results/speed_profile_<run>.csv
 bag itself stays out of git) and plots results/speed_profile.png; --speed-csv replots that CSV.
 --window START END limits the profile plot to that span, e.g. one lap's start_s and end_s
 from the trials CSV (sim seconds, when the bag recorded /clock).
+--route BAG (with --trials) exports the robot's AMCL track to results/route_<run>.csv and draws
+every lap over the depot map, zones and stations as results/route_map.png; --route-csv redraws
+it from that CSV.
 --sweep DIR [DIR ...] plots one or more obstacle_sweep.sh runs, pooled, as
 results/obstacle_sweep.png; add --trials to draw the no-pallet CNC_CELL legs from that run as
 the reference band.
@@ -240,6 +243,117 @@ def plot_sweep(legs, out_png, reference=None):
     plt.close(fig)
 
 
+def export_route(bag_dir, out_csv):
+    """Write the robot's /amcl_pose track (sim time from each message's own stamp) to CSV."""
+    from rclpy.serialization import deserialize_message
+    import rosbag2_py
+    from rosidl_runtime_py.utilities import get_message
+
+    reader = rosbag2_py.SequentialReader()
+    reader.open(rosbag2_py.StorageOptions(uri=str(bag_dir), storage_id='mcap'),
+                rosbag2_py.ConverterOptions('', ''))
+    msg_type = get_message('geometry_msgs/msg/PoseWithCovarianceStamped')
+    rows = []
+    while reader.has_next():
+        topic, data, _ = reader.read_next()
+        if topic != '/amcl_pose':
+            continue
+        msg = deserialize_message(data, msg_type)
+        stamp = msg.header.stamp.sec + msg.header.stamp.nanosec / 1e9
+        rows.append((f'{stamp:.3f}', f'{msg.pose.pose.position.x:.3f}',
+                     f'{msg.pose.pose.position.y:.3f}'))
+    with open(out_csv, 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['t_sim_s', 'x', 'y'])
+        writer.writerows(rows)
+    return len(rows)
+
+
+def _map_layer(pgm, meta):
+    from PIL import Image
+
+    image = Image.open(pgm).convert('L')
+    width, height = image.size
+    x0, y0 = meta['origin'][:2]
+    extent = (x0, x0 + width * meta['resolution'], y0, y0 + height * meta['resolution'])
+    return image, extent
+
+
+def plot_route_map(route_csv, trials_csv, out_png):
+    import numpy as np
+    import yaml
+
+    from ament_index_python.packages import get_package_share_directory
+
+    repo = Path(__file__).resolve().parents[1]
+    depot_yaml = Path(get_package_share_directory('nav2_bringup')) / 'maps' / 'depot.yaml'
+    depot_meta = yaml.safe_load(depot_yaml.read_text())
+    depot, extent = _map_layer(depot_yaml.parent / depot_meta['image'], depot_meta)
+    keepout, _ = _map_layer(repo / 'maps' / 'keepout_mask.pgm', depot_meta)
+    speed, _ = _map_layer(repo / 'maps' / 'speed_mask.pgm', depot_meta)
+    stations = yaml.safe_load((repo / 'config' / 'mission.yaml').read_text())['mission']
+
+    laps = {}
+    with open(trials_csv, newline='') as f:
+        for row in csv.DictReader(f):
+            lap = laps.setdefault(int(row['lap']), [float('inf'), 0.0, False])
+            lap[0] = min(lap[0], float(row['start_s']))
+            lap[1] = max(lap[1], float(row['end_s']))
+            lap[2] |= row['obstacle'] == '1'
+    with open(route_csv, newline='') as f:
+        track = [(float(r['t_sim_s']), float(r['x']), float(r['y'])) for r in csv.DictReader(f)]
+
+    fig, ax = plt.subplots(figsize=(8.6, 6.6), dpi=150)
+    # Map: occupied cells dark, free white, unknown a light grey, as map_server reads them.
+    ax.imshow(np.asarray(depot), cmap='gray', vmin=0, vmax=255, extent=extent, alpha=0.55)
+    for mask, value, colour in ((keepout, 0, '#e34948'), (speed, 105, '#6250d6')):
+        cells = np.asarray(mask) == value
+        overlay = np.zeros(cells.shape + (4,))
+        overlay[cells] = matplotlib.colors.to_rgba(colour, 0.35)
+        ax.imshow(overlay, extent=extent)
+
+    for lap, (start, end, obstacle) in sorted(laps.items()):
+        xs = [x for t, x, _ in track if start <= t <= end]
+        ys = [y for t, _, y in track if start <= t <= end]
+        ax.plot(xs, ys, color=OBSTACLE if obstacle else NORMAL, linewidth=1.2, alpha=0.8,
+                zorder=3)
+
+    spot = stations['obstacle']
+    ax.add_patch(matplotlib.patches.Rectangle((spot['x'] - 0.25, spot['y'] - 0.25), 0.5, 0.5,
+                                              fill=False, edgecolor=INK, linewidth=1.2, zorder=4))
+    ax.annotate('pallet drop spot', (spot['x'], spot['y'] - 0.25), textcoords='offset points',
+                xytext=(0, -12), ha='center', fontsize=7, color=INK)
+    for st in stations['stations']:
+        ax.plot(st['x'], st['y'], marker='o', markersize=6, color=INK, zorder=5)
+        ax.annotate(st['name'], (st['x'], st['y']), textcoords='offset points', xytext=(6, 6),
+                    fontsize=8, color=INK, fontweight='bold')
+    ax.annotate('keepout lane', (2.4, 0.0), ha='center', va='center', rotation=90, fontsize=7,
+                color='#a32422')
+    ax.annotate('CNC speed zone (40 %)', (11.0, 2.6), ha='center', fontsize=7, color='#3e3197')
+
+    xs = [x for _, x, _ in track] + [st['x'] for st in stations['stations']]
+    ys = [y for _, _, y in track] + [st['y'] for st in stations['stations']]
+    ax.set_xlim(min(xs) - 1.5, max(xs) + 1.5)
+    ax.set_ylim(min(ys) - 1.5, max(ys) + 1.5)
+    ax.set_aspect('equal')
+    ax.set_xlabel('map x (m)', color=MUTED, fontsize=8)
+    ax.set_ylabel('map y (m)', color=MUTED, fontsize=8)
+    ax.tick_params(colors=MUTED, labelsize=7)
+    for side in ('top', 'right'):
+        ax.spines[side].set_visible(False)
+    ax.set_title(f'{len(laps)} laps of the station loop, as localized by the robot',
+                 loc='left', color=INK, fontsize=11)
+    handles = [plt.Line2D([], [], color=NORMAL, linewidth=1.5, label='Lap without pallet'),
+               plt.Line2D([], [], color=OBSTACLE, linewidth=1.5, label='Lap with pallet dropped'),
+               Patch(color='#e34948', alpha=0.35, label='Keepout lane'),
+               Patch(color='#6250d6', alpha=0.35, label='Speed zone')]
+    ax.legend(handles=handles, frameon=False, fontsize=8, loc='upper left',
+              bbox_to_anchor=(0, -0.1), ncol=4)
+    fig.tight_layout()
+    fig.savefig(out_png)
+    plt.close(fig)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description='Plot trial results for the README.')
     parser.add_argument('--trials', type=Path, help='trials_<run>.csv from trial_runner')
@@ -248,15 +362,29 @@ def main(argv=None):
     parser.add_argument('--window', type=float, nargs=2, metavar=('START', 'END'),
                         help='only plot the profile between these times')
     parser.add_argument('--title-note', default='', help='appended to the profile title')
+    parser.add_argument('--route', type=Path, help='rosbag directory with /amcl_pose')
+    parser.add_argument('--route-csv', type=Path, help='an exported route_<run>.csv')
     parser.add_argument('--sweep', type=Path, nargs='+',
                         help='one or more obstacle_sweep.sh output directories')
     parser.add_argument('--out-dir', type=Path, default=Path('results'))
     args = parser.parse_args(argv)
-    if not (args.trials or args.bag or args.speed_csv or args.sweep):
-        parser.error('give --trials, --bag, --speed-csv or --sweep')
+    if not (args.trials or args.bag or args.speed_csv or args.sweep or args.route
+            or args.route_csv):
+        parser.error('give --trials, --bag, --speed-csv, --sweep, --route or --route-csv')
     matplotlib.use('Agg')  # files only; no window even when a display is available
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
+    if args.route or args.route_csv:
+        if not args.trials:
+            parser.error('--route and --route-csv need --trials to tell the laps apart')
+        route_csv = args.route_csv
+        if args.route:
+            route_csv = args.out_dir / f'route_{args.route.name}.csv'
+            print(f'wrote {route_csv} ({export_route(args.route, route_csv)} poses)')
+        out = args.out_dir / 'route_map.png'
+        plot_route_map(route_csv, args.trials, out)
+        print(f'wrote {out}')
+        return 0
     if args.sweep:
         reference = None
         if args.trials:

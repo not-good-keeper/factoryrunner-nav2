@@ -4,7 +4,9 @@ A TurtleBot3 Waffle works a four-station loop in Gazebo's depot world under Nav2
 
 **Video:** _link to be added_
 
-![Lap time over 10 trial laps](results/lap_durations.png)
+![Ten laps of the station loop drawn over the depot map](results/route_map.png)
+
+Every lap of the 10-lap trial, drawn from the robot's own localization (`results/route_trials_10lap_20261027b.csv`). On the three laps where a pallet was dropped onto the path, the route swings around it; the keepout lane and the CNC speed zone are drawn from the same masks Nav2 uses.
 
 ## Highlights
 
@@ -184,6 +186,8 @@ Every figure below comes from a file in `results/`. The runs are headless on the
 |---|---|---|---|---|
 | No pallet | 7 | 88.9–91.4, median 89.7 | 28.6–29.9 | 0.89–0.96 |
 | Pallet | 3 | 91.1, 91.2, 92.3 | 30.0–31.1 | 0.78–0.81 |
+
+![Lap time over the 10 trial laps](results/lap_durations.png)
 
 All 40 legs succeeded with no recoveries, and the collision monitor never left its normal state. Three metres of warning is enough for the planner to route around the pallet before the slowdown field, which reaches 0.70 m ahead, comes into play. The pallet laps finished 1.4, 1.5 and 2.6 s above the median lap without one, and only the slowest falls outside the no-pallet range, by 0.9 s. The sweep below shows what happens with less warning.
 
