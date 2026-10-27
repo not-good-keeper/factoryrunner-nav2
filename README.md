@@ -12,7 +12,7 @@ Every lap of the 10-lap trial, drawn from the robot's own localization (`results
 
 - **Navigation that holds up under test.** All 40 legs of a 10-lap trial succeeded with a pallet dropped into the robot's path, and a sweep of drop distances shows where the safety layer takes over as warning time shrinks.
 - **Two real faults traced to their cause.** A Nav2 freeze followed through gdb thread dumps into Fast DDS locks and fixed by changing middleware, and a 20 ms behaviour-tree timeout that let a single late reply abort an entire goal. The story is in [docs/CHALLENGES.md](docs/CHALLENGES.md).
-- **Perception without touching the robot.** The Waffle's own depth camera, which Nav2's launch leaves unused, feeds a C++/OpenCV detector that spots a 10 cm crate the LiDAR never sees.
+- **Perception without touching the robot.** The Waffle's own depth camera, which Nav2's launch leaves unused, feeds a C++/OpenCV detector that spots a 10 cm crate the LiDAR never sees; fed into the costmaps as well, it turns a collision with that crate into a clean detour in three runs out of three.
 - **Machine learning where the data is.** An Optuna study of four Nav2 parameters; on a pallet position the study never used, the tuned set won 99 of 100 lap pairings against the defaults (10 laps each, p = 2.2 × 10⁻⁵), 3.8 % faster with no extra failures.
 - **Reliability tooling.** A health monitor on `/diagnostics`, per-leg timeouts, a harness for static, timed and moving obstacles, local CI in `scripts/check.sh` and a headless Docker image.
 
@@ -155,7 +155,7 @@ ros2 run factoryrunner trial_runner --ros-args -p mission_file:=$(ros2 pkg prefi
 bash ~/fr_ws/src/factoryrunner-nav2/scripts/obstacle_sweep.sh 3 3.0 2.0 1.5 1.2
 ```
 
-Adding `headless:=True use_rviz:=False` to the launch runs it without windows. Results are written to `results/` in this checkout. Navigation only becomes active once the controller has set the initial pose, so the controller should start within about a minute of the launch, before the planner's activation times out.
+Two opt-in options change the navigation configuration, and both are off by default so the results below keep the configuration they were measured with: `depth_costmap:=True` adds the depth camera as an obstacle source, and `velocity_stop:=True` swaps the fixed stop box for one that follows the robot's motion, for example `ros2 launch factoryrunner sim.launch.py depth_costmap:=True velocity_stop:=True`. Each merges a small file from `config/overlays/` onto `nav2_params.yaml` at launch. Adding `headless:=True use_rviz:=False` to the launch runs it without windows. Results are written to `results/` in this checkout. Navigation only becomes active once the controller has set the initial pose, so the controller should start within about a minute of the launch, before the planner's activation times out.
 
 `scripts/check.sh` runs the same lint, build and unit-test steps as `.github/workflows/ci.yml`, on a clean copy of the files git would commit. It stands in for CI, since GitHub Actions does not run on this account.
 
@@ -165,7 +165,7 @@ bash scripts/check.sh
 
 ## Configuration changes from Jazzy's defaults
 
-`config/nav2_params.yaml` starts as a copy of `nav2_bringup/params/nav2_params.yaml`, and these are its only changes:
+`config/nav2_params.yaml` starts as a copy of `nav2_bringup/params/nav2_params.yaml`, and these are its only changes. The two opt-in overlays in `config/overlays/` are described with their results further down.
 
 | Change | Reason |
 |---|---|
@@ -203,6 +203,8 @@ All 40 legs succeeded with no recoveries, and the collision monitor never left i
 | 1.2 m | 47.1–57.4, and one canceled at 120 s | 0.38–0.58, and 0.32 | 12.1–19.5, and 108.6 | 4/5 |
 
 With three metres of warning the planner reroutes before the safety fields are involved at all. From two metres down, the slowdown field takes an ever larger share of the leg and the robot passes ever closer to the pallet. In one lap in five at the closest setting the pallet ended up inside the stop field, where the collision monitor blocks every command, including the reversing that would free the robot, so it stayed put until the 120 s leg timeout canceled the leg. The pallet also tends to appear a little later than configured, between 0.02 and 0.35 m closer (logged trigger distances of 2.66–2.98 m, 1.66–1.87 m, 1.15–1.44 m and 0.91–1.17 m), because the trigger reads AMCL's pose, which is only republished after 0.25 m of travel.
+
+**A stop field that follows the motion** (`results/obstacle_sweep_20261027-230022/`, `config/overlays/velocity_stop.yaml`). Launching with `velocity_stop:=True` swaps the fixed stop box for one of Jazzy's velocity polygons, which picks its shape from the command it is about to pass on: the original box when driving forward, a box mostly behind the robot when reversing, and one hugging the body when turning on the spot. An obstacle in front therefore no longer blocks the robot from backing away from it. Rerunning the closest setting, 1.2 m, for five laps with this field gave five successful laps, against four of five with the fixed box. In one of them the pallet came within 0.33 m and the stop field fired, but the robot backed out after 0.51 s instead of being held for 108.6 s. Leg times (40.8 to 59.1 s) and recoveries (one to three per leg) were in the same range as the fixed box's successful laps, so the change removed the lock-up without making ordinary laps worse. Five laps a side is a small sample, so this is a promising result rather than a proven one. Like the depth costmap, the option is off by default.
 
 `config/video.yaml` uses the 1.5 m setting, where all five sweep laps succeeded with 8 to 17 s of visible slowdown. A separate single lap in that mode (`results/video_mode/`) triggered at 1.40 m and passed 0.73 m from the pallet without slowing, so a recording may need a second take.
 
@@ -246,7 +248,10 @@ For each depth frame the node back-projects every pixel into 3D using the camera
 
 **Blind-spot test** (`results/blindspot/`). During leg 2, a 0.4 × 0.4 × 0.10 m crate was dropped on the planned path 3 m ahead of the robot with the detector running. The camera reported it when the robot was 2.83 m away, flagged as lying below the LiDAR plane with its top 0.09 m above the floor, and kept reporting it as the robot closed in. Meanwhile the closest LiDAR return in the robot's forward ±20° stayed at 2.47 m while the crate was 0.5 to 2.5 m ahead, an echo from something behind it. Nav2, whose costmaps are fed only by the LiDAR, drove straight into the crate, bringing the robot's centre within 0.12 m of the crate's. The leg failed after 62.6 s, when the planner could no longer plan from the robot's estimated pose of roughly (13.1, 0.4), past the station; wheel slip on the crate most likely threw off odometry and localization, although that was not confirmed.
 
-This is exactly the case the detector exists for. Feeding its detections into the local costmap would let Nav2 avoid such obstacles, but it would also change the navigation configuration that every other result here was measured with, so it is left as the next step.
+**Closing the blind spot** (`results/blindspot_depth/`, `config/overlays/depth_costmap.yaml`). Launching with `depth_costmap:=True` adds the same camera to Nav2 as a second obstacle source, next to the LiDAR, in both costmaps and in the collision monitor. A small C++ relay in `factoryrunner_vision` thins each cloud to about 4,800 points and re-labels it with a frame placed where Gazebo actually renders the sensor, because the robot description's own camera frame sits lower and is rotated as an optical frame (the challenges log has the details). Points under 4 cm are treated as floor. The option is off by default, so every other result here keeps the configuration it was measured with.
+
+With the depth camera on, the same crate drop was repeated three times. The robot steered around it in all three, keeping its centre 0.48 to 0.64 m from the crate's centre instead of 0.12 m, and each mission completed all four legs. The crate leg took 38.7, 42.4 and 51.7 s against the 62.6 s failure without the camera. The extra sensor is not free: in a mission with no crate at all, the same leg took 36.3 s with the camera on (`results/depth_costmap_no_obstacle/`) against 28.6 to 29.9 s without it, probably because the camera also sees low clutter near the shelves that the LiDAR passes under, which lengthens the paths.
+
 
 ## Machine learning: tuning Nav2 parameters against the harness
 
@@ -294,7 +299,7 @@ The Fast DDS freeze is a reminder that the middleware itself can fail, which arg
 
 Everything here is simulation, and the collision monitor is not a certified safety function, with fields sized for this robot in simulation. Localization depends on Nav2's depot map, so the robot has to start at its spawn point, map (0, 0), and the station poses were picked by hand from that map. The samples are small (a 10-lap trial, 25 study trials, ten validation laps a side, three to five laps per sweep distance), so differences of a second or two sit within run-to-run spread, and the Fast DDS freeze was seen on one machine over a handful of runs, which makes the diagnosis strong evidence rather than a reproduced bug report.
 
-Several limits come from the navigation stack itself. Obstacles below the LiDAR plane are invisible to navigation: the depth detector sees them but only reports, and Nav2 drove into a 10 cm crate in the blind-spot test. An obstacle that ends up inside the stop field can hold the robot still indefinitely, because the collision monitor also blocks the motions that would free it, and the leg timeout turns that into a logged failure, not a recovery. Any stall longer than Nav2's 4 s bond timeout leaves the stack down until it is restarted; the health monitor reports it, but nothing restarts it. And moving obstacles are handled by replanning around each new scan rather than by predicting their motion, which is why the crossing-pallet legs took 40 to 65 s instead of about 30 s.
+Several limits come from the navigation stack itself. In the default configuration, obstacles below the LiDAR plane are invisible to navigation, and Nav2 drove into a 10 cm crate; the opt-in depth costmap fixes that at the cost of slower legs near low clutter. With the default fixed stop box, an obstacle that ends up inside it can hold the robot still indefinitely, because the collision monitor also blocks the motions that would free it; the opt-in velocity-based field avoided that in five laps out of five, a small sample. Any stall longer than Nav2's 4 s bond timeout leaves the stack down until it is restarted; the health monitor reports it, but nothing restarts it. And moving obstacles are handled by replanning around each new scan rather than by predicting their motion, which is why the crossing-pallet legs took 40 to 65 s instead of about 30 s.
 
 ## Biggest challenge
 
