@@ -1,4 +1,5 @@
-from factoryrunner.tuning import by_node, defaults, objective, SEARCH_SPACE
+from factoryrunner.tuning import (by_node, defaults, mann_whitney_exact, objective,
+                                  SEARCH_SPACE)
 import pytest
 
 
@@ -51,3 +52,15 @@ def test_defaults_match_nav2_params():
         for key in p.name.split('.'):
             value = value[key]
         assert value == pytest.approx(p.default), p.name
+
+
+def test_mann_whitney_complete_separation_5_v_5():
+    u, p = mann_whitney_exact([93.3, 95.8, 93.3, 96.3, 92.7], [90.0, 89.7, 90.3, 92.3, 90.0])
+    assert u == 25
+    assert p == pytest.approx(2 / 252)
+
+
+def test_mann_whitney_identical_samples_are_not_significant():
+    u, p = mann_whitney_exact([1.0, 2.0, 3.0], [1.0, 2.0, 3.0])
+    assert u == pytest.approx(4.5)
+    assert p == pytest.approx(1.0)

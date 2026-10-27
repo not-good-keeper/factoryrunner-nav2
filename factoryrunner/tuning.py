@@ -5,6 +5,7 @@ README; changing them after seeing results would make the study meaningless.
 """
 
 from dataclasses import dataclass
+from itertools import combinations
 
 
 @dataclass(frozen=True)
@@ -60,3 +61,29 @@ def objective(legs, planned_legs):
             + RECOVERY_PENALTY * recoveries
             + CLEARANCE_PENALTY * shortfall / CLEARANCE_TARGET_M
             + STOP_EVENT_PENALTY * stops)
+
+
+def mann_whitney_exact(a, b):
+    """Exact two-sided Mann-Whitney U test; returns (U for a over b, p-value).
+
+    Enumerates every way of splitting the pooled values into groups of len(a) and len(b), so
+    it is exact for the small samples here (10 + 10 is 184,756 splits). Ties count half.
+    """
+    if not a or not b:
+        raise ValueError('both samples need at least one value')
+
+    def u_stat(x, y):
+        return sum((xi > yi) + 0.5 * (xi == yi) for xi in x for yi in y)
+
+    pooled = list(a) + list(b)
+    centre = len(a) * len(b) / 2
+    observed = u_stat(a, b)
+    extreme = total = 0
+    for idx in combinations(range(len(pooled)), len(a)):
+        chosen = set(idx)
+        u = u_stat([pooled[i] for i in idx],
+                   [pooled[i] for i in range(len(pooled)) if i not in chosen])
+        total += 1
+        if abs(u - centre) >= abs(observed - centre) - 1e-9:
+            extreme += 1
+    return observed, extreme / total

@@ -10,8 +10,9 @@ python3 scripts/plot_results.py --speed-csv results/speed_profile_<run>.csv
 bag itself stays out of git) and plots results/speed_profile.png; --speed-csv replots that CSV.
 --window START END limits the profile plot to that span, e.g. one lap's start_s and end_s
 from the trials CSV (sim seconds, when the bag recorded /clock).
---sweep DIR plots an obstacle_sweep.sh run as results/obstacle_sweep.png; add --trials to draw
-the no-pallet CNC_CELL legs from that run as the reference band.
+--sweep DIR [DIR ...] plots one or more obstacle_sweep.sh runs, pooled, as
+results/obstacle_sweep.png; add --trials to draw the no-pallet CNC_CELL legs from that run as
+the reference band.
 """
 
 import argparse
@@ -189,10 +190,10 @@ def plot_speed_profile(profile_csv, out_png, window=None, title_note=''):
     plt.close(fig)
 
 
-def load_sweep(sweep_dir, leg_station='CNC_CELL'):
-    """Return {drop distance: [CNC leg rows]} from an obstacle_sweep.sh output directory."""
+def load_sweep(sweep_dirs, leg_station='CNC_CELL'):
+    """Return {drop distance: [CNC leg rows]} pooled from obstacle_sweep.sh output directories."""
     legs = {}
-    for csv_path in sorted(Path(sweep_dir).glob('d*/trials_*.csv')):
+    for csv_path in sorted(p for d in sweep_dirs for p in Path(d).glob('d*/trials_*.csv')):
         distance = float(csv_path.parent.name[1:])
         with open(csv_path, newline='') as f:
             legs.setdefault(distance, []).extend(
@@ -247,7 +248,8 @@ def main(argv=None):
     parser.add_argument('--window', type=float, nargs=2, metavar=('START', 'END'),
                         help='only plot the profile between these times')
     parser.add_argument('--title-note', default='', help='appended to the profile title')
-    parser.add_argument('--sweep', type=Path, help='an obstacle_sweep.sh output directory')
+    parser.add_argument('--sweep', type=Path, nargs='+',
+                        help='one or more obstacle_sweep.sh output directories')
     parser.add_argument('--out-dir', type=Path, default=Path('results'))
     args = parser.parse_args(argv)
     if not (args.trials or args.bag or args.speed_csv or args.sweep):

@@ -141,11 +141,13 @@ def cmd_validate(args):
     return 0
 
 
-def summarise(validation_csv):
-    """Return {config: [per-lap dicts]} from a validation CSV."""
+def summarise(validation_csvs):
+    """Return {config: [per-lap dicts]} pooled from one or more validation CSVs."""
     laps = {}
-    with open(validation_csv, newline='') as f:
-        for row in csv.DictReader(f):
+    for path in validation_csvs:
+        with open(path, newline='') as f:
+            rows = list(csv.DictReader(f))
+        for row in rows:
             config = row['run_id'].split('-')[-2]
             lap = laps.setdefault((config, row['run_id']), {
                 'lap_time': 0.0, 'failed': 0, 'recoveries': 0, 'clearance': [], 'legs': 0})
@@ -166,7 +168,7 @@ def cmd_report(args):
     import matplotlib.pyplot as plt
     import optuna
 
-    from factoryrunner.tuning import SEARCH_SPACE
+    from factoryrunner.tuning import mann_whitney_exact, SEARCH_SPACE
 
     matplotlib.use('Agg')
     study = optuna.load_study(study_name=STUDY_NAME, storage=args.storage)
@@ -212,17 +214,27 @@ def cmd_report(args):
     if not validation:
         print('no validation run yet')
         return 0
-    print(f'\nvalidation: {validation[-1].name}')
+    # Every validation run so far used the same best parameters and held-out spot, so pool them.
+    print('\nvalidation: ' + ', '.join(v.name for v in validation))
     print('| Config | Laps | Lap time median (s) | Lap time range (s) | Failed legs '
           '| Recoveries | Min clearance (m) |')
     print('|---|---|---|---|---|---|---|')
-    for config, laps in sorted(summarise(validation[-1]).items()):
+    pooled = summarise(validation)
+    for config, laps in sorted(pooled.items()):
         times = [lap['lap_time'] for lap in laps]
         clear = [c for lap in laps for c in lap['clearance']]
         clearance = f'{min(clear):.2f}' if clear else 'n/a'
         print(f'| {config} | {len(laps)} | {statistics.median(times):.1f} '
               f'| {min(times):.1f}-{max(times):.1f} | {sum(lap["failed"] for lap in laps)} '
               f'| {sum(lap["recoveries"] for lap in laps)} | {clearance} |')
+    if {'default', 'tuned'} <= pooled.keys():
+        default = [lap['lap_time'] for lap in pooled['default']]
+        tuned = [lap['lap_time'] for lap in pooled['tuned']]
+        u, p_value = mann_whitney_exact(default, tuned)
+        print(f'\nlap times default: {", ".join(f"{t:.1f}" for t in default)}')
+        print(f'lap times tuned:   {", ".join(f"{t:.1f}" for t in tuned)}')
+        print(f'exact two-sided Mann-Whitney: U = {u:g} of {len(default) * len(tuned)}, '
+              f'p = {p_value:.2g}')
     return 0
 
 
