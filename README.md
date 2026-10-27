@@ -6,6 +6,31 @@ A TurtleBot3 Waffle runs a four-station loop in Gazebo's depot world under Nav2:
 
 ![Lap time over 10 trial laps](results/lap_durations.png)
 
+## Highlights
+
+- **Navigation that holds up under test:** 40/40 legs in a 10-lap trial with a pallet dropped into the path, and a sweep showing exactly where the safety layer takes over as warning time shrinks (3.0 m down to 1.2 m).
+- **Two real faults diagnosed from evidence:** a Nav2 freeze traced with gdb thread dumps to Fast DDS locks (fixed by switching middleware), and a 20 ms behaviour-tree timeout that let one late reply abort whole goals. The full story is in [docs/CHALLENGES.md](docs/CHALLENGES.md).
+- **Perception without touching the robot:** the stock Waffle's own depth camera, unused by Nav2's launch, feeds a C++/OpenCV detector that sees a 10 cm crate the LiDAR misses.
+- **Machine learning where the data is:** an Optuna study of four Nav2 parameters; on a pallet position it never saw, the tuned set beat the defaults in 99 of 100 lap pairings (10 + 10 laps, p = 2.2 × 10⁻⁵), 3.8 % faster with no added failures.
+- **Reliability tooling:** a health monitor on `/diagnostics`, per-leg timeouts, a trial harness with static, timed and moving obstacles, local CI (`scripts/check.sh`) and a headless Docker image.
+
+## Quick start
+
+On Ubuntu 24.04 (native or WSL2):
+
+```bash
+mkdir -p ~/fr_ws/src && cd ~/fr_ws/src
+git clone https://github.com/not-good-keeper/factoryrunner-nav2.git
+bash factoryrunner-nav2/scripts/setup_jazzy.sh        # ROS 2 Jazzy, Nav2, Gazebo, Cyclone DDS
+cd ~/fr_ws && source /opt/ros/jazzy/setup.bash
+colcon build --symlink-install --base-paths src src/factoryrunner-nav2/factoryrunner_vision
+source install/setup.bash && export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+ros2 launch factoryrunner sim.launch.py               # terminal 1: Gazebo + RViz + Nav2
+ros2 run factoryrunner mission_controller             # terminal 2 (same sourcing): one station loop
+```
+
+Details, options and every other program are under [Setup](#setup) and [Run](#run).
+
 ## Tested with
 
 | | Version |
@@ -167,20 +192,20 @@ All numbers come from files in `results/`. Runs are headless on the machine abov
 
 All 40 legs succeeded, with no recoveries, and the collision monitor never left its normal state. With 3 m of warning the planner routes around the pallet before the slowdown field (0.70 m ahead) can reach it, so the pallet laps came in 1.4, 1.5 and 2.6 s above the median lap without it, and only the slowest of them is outside the no-pallet range, by 0.9 s. The sweep below shows what happens with less warning.
 
-**Obstacle-distance sweep** (`results/obstacle_sweep_20261026-213234/`, `scripts/obstacle_sweep.sh`). The same pallet at the same spot, dropped at four configured distances, three laps each:
+**Obstacle-distance sweep** (`results/obstacle_sweep_20261026-213234/` with 3 laps per distance and `results/obstacle_sweep_20261027-200023/` with 2 more, `scripts/obstacle_sweep.sh`). The same pallet at the same spot, dropped at four configured distances, five laps each:
 
 ![CNC_CELL leg against drop distance](results/obstacle_sweep.png)
 
 | Configured drop | CNC_CELL leg (s) | Closest scan return (m) | Slowdown + stop (s) | Legs succeeded |
 |---|---|---|---|---|
-| 3.0 m | 29.7–30.7 | 0.76–0.81 | 0 | 3/3 |
-| 2.0 m | 34.3–37.5 | 0.68–0.73 | 0–3.3 | 3/3 |
-| 1.5 m | 42.5–48.2 | 0.56–0.63 | 8.2–12.7 | 3/3 |
-| 1.2 m | 50.5, 55.6, then canceled at 120 s | 0.46, 0.51, 0.32 | 13.6, 17.9, 108.6 | 2/3 |
+| 3.0 m | 29.7–31.2 | 0.76–0.81 | 0 | 5/5 |
+| 2.0 m | 31.9–37.5 | 0.68–0.78 | 0–3.3 | 5/5 |
+| 1.5 m | 41.7–53.9 | 0.45–0.64 | 8.1–17.1 | 5/5 |
+| 1.2 m | 47.1–57.4, and one canceled at 120 s | 0.38–0.58, and 0.32 | 12.1–19.5, and 108.6 | 4/5 |
 
-With 3 m of warning the planner reroutes before the safety fields are involved. From 2 m down, the slowdown field takes a growing share of the leg, and the robot passes closer to the pallet. At 1.2 m one lap ended with the pallet inside the stop field: the collision monitor then blocks every command, including the backing-up that would free the robot, so it stayed stopped until the 120 s leg timeout canceled the leg (details in the challenges). The pallet appears 0.02–0.35 m closer than configured (logged trigger distances: 2.86–2.98 m, 1.66–1.82 m, 1.15–1.22 m and 0.98–1.17 m), because the trigger uses AMCL's pose, which is only republished after 0.25 m of travel.
+With 3 m of warning the planner reroutes before the safety fields are involved. From 2 m down, the slowdown field takes a growing share of the leg, and the robot passes closer to the pallet. At 1.2 m one lap in five ended with the pallet inside the stop field: the collision monitor then blocks every command, including the backing-up that would free the robot, so it stayed stopped until the 120 s leg timeout canceled the leg (details in the challenges). The pallet appears 0.02–0.35 m closer than configured (logged trigger distances: 2.66–2.98 m, 1.66–1.87 m, 1.15–1.44 m and 0.91–1.17 m), because the trigger uses AMCL's pose, which is only republished after 0.25 m of travel.
 
-`config/video.yaml` uses the 1.5 m setting: all three sweep laps at that setting succeeded with 8–13 s of visible slowdown. One separate video-mode lap (`results/video_mode/`) triggered at 1.40 m and passed 0.73 m from the pallet without slowing, so a recording may need a second take.
+`config/video.yaml` uses the 1.5 m setting: all five sweep laps at that setting succeeded with 8–17 s of visible slowdown. One separate video-mode lap (`results/video_mode/`) triggered at 1.40 m and passed 0.73 m from the pallet without slowing, so a recording may need a second take.
 
 **Moving obstacle** (`results/crossing/trials_20261026-215920.csv`, `config/crossing.yaml`). The pallet spawns at the shelf edge beside the CNC_CELL path once the robot is 3 m away, then slides across the path to the open side of the aisle at 0.25 m/s, like a cart crossing in front of the robot. It is a static model moved in 0.0125 m steps at 20 Hz through Gazebo's `set_pose` service (`factoryrunner/crossing.py`); a check with the robot parked showed its LiDAR return moving from −15° to +17° bearing as it slid 1.2 m.
 
@@ -254,16 +279,16 @@ The study used Optuna's TPE sampler (seed 42), and its first trial was the defau
 
 ![Objective per trial](results/tuning_history.png)
 
-**Validation** (`results/validation_20261026-210504.csv`). Default and tuned parameters alternated lap by lap, with the pallet at the held-out spot:
+**Validation** (`results/validation_20261026-210504.csv` and `results/validation_20261027-194142.csv`, two runs of 5 + 5 laps on different days, same parameters and spot). Default and tuned parameters alternated lap by lap, with the pallet at the held-out spot:
 
 | Parameters | Laps | Lap time (s) | Median (s) | CNC_CELL leg (s) | Failed legs | Recoveries | Closest scan return (m) |
 |---|---|---|---|---|---|---|---|
-| Default | 5 | 93.3, 95.8, 93.3, 96.3, 92.7 | 93.3 | 30.9–35.0 | 0 | 0 | 0.65 |
-| Tuned (trial 23) | 5 | 90.0, 89.7, 90.3, 92.3, 90.0 | 90.0 | 30.5–33.1 | 0 | 0 | 0.65 |
+| Default | 10 | 93.3, 95.8, 93.3, 96.3, 92.7, 93.3, 93.5, 93.8, 95.0, 96.1 | 93.6 | 30.9–35.0 | 0 | 0 | 0.63 |
+| Tuned (trial 23) | 10 | 90.0, 89.7, 90.3, 92.3, 90.0, 90.2, 90.0, 89.7, 90.7, 93.0 | 90.1 | 30.5–33.1 | 0 | 0 | 0.63 |
 
-Every tuned lap was faster than every default lap. An exact two-sided Mann–Whitney test on the lap times gives p = 0.008, the smallest value possible with five laps a side. The median lap dropped by 3.3 s (3.5 %) with no change in failures, recoveries or the closest scan return. The tuned set has a slightly lower `vx_max` than the default, so the gain does not come from a higher speed cap. I have not tested why it is faster; heavier path-following and obstacle-cost weights giving fewer corrections is a plausible explanation, not a measured one.
+Of the 100 default–tuned pairs, the tuned lap was faster in 99; the exception is the slowest tuned lap (93.0 s) against the fastest default one (92.7 s). An exact two-sided Mann–Whitney test on the lap times gives p = 2.2 × 10⁻⁵ (`scripts/tune.py report`, computed by `mann_whitney_exact` in `factoryrunner/tuning.py`). The median lap dropped by 3.5 s (3.8 %) with no change in failures, recoveries or the closest scan return. The first five laps a side alone gave the same picture (p = 0.008), and the second run on a later day repeated it. The tuned set has a slightly lower `vx_max` than the default, so the gain does not come from a higher speed cap. I have not tested why it is faster; heavier path-following and obstacle-cost weights giving fewer corrections is a plausible explanation, not a measured one.
 
-This is a small result under narrow conditions: one machine, one held-out pallet spot, five laps each, and a lap-to-lap spread of up to 3.6 s in the default runs (trial 0 alone scored 92.0 here against 90.6 in a dry run). It says the tuned set was faster on this course in this sim, not that it is better in general. The tuned values are not written into `config/nav2_params.yaml`; every other result in this README uses the defaults.
+This is still a result under narrow conditions: one machine, one held-out pallet spot, ten laps each, and a lap-to-lap spread of 3.6 s in the default runs. It says the tuned set was faster on this course in this sim, not that it is better in general. The tuned values are not written into `config/nav2_params.yaml`; every other result in this README uses the defaults.
 
 ## Path to hardware
 
@@ -273,6 +298,7 @@ Nothing here has run on a physical robot, so this section is a plan, not experie
 - **Odometry.** Wheel slip and uneven floors break the simulator's near-perfect odometry. I would check AMCL's `alpha1`–`alpha5` motion-noise values against logged runs, and expect the 0.25 m goal tolerance to need loosening or a final alignment step at each station.
 - **Safety.** The collision monitor is a software layer, not a safety function. A real cell needs a hardware emergency stop and, for anything sharing space with people, a safety-rated scanner, with the collision monitor kept as a second layer that slows the robot before the certified one has to stop it.
 - **Timing and middleware.** The Fast DDS freeze is a reminder that the middleware itself can fail. On hardware I would run `health_monitor` from the start, log `/diagnostics` with every run, and treat a silent node as a fault rather than a slow one. The leg timeout already turns a hung goal into a logged CANCELED row instead of a robot waiting forever.
+- **Perception.** A real RealSense publishes depth as 16-bit millimetres (`16UC1`), while the simulator gives 32-bit float metres. `cv_bridge` converts the type but not the units, so the detector would need an explicit millimetre-to-metre step before it could run on hardware, and its camera height would have to be re-measured with the same floor-pixel method on the real mount. Real depth also has holes on shiny or dark surfaces, which the detector already skips as invalid pixels.
 - **Testing.** The trial harness does not depend on the simulator: it sends goals and records topics, so the same lap, metrics and CSV would work on a real robot with a person placing the pallet. The same applies to the speed-zone and collision-monitor checks, which read the same topics.
 
 ## Known limitations
@@ -281,7 +307,7 @@ Nothing here has run on a physical robot, so this section is a plan, not experie
 - The collision monitor is not a certified safety function, and its fields were sized for this robot in simulation.
 - Localization depends on Nav2's depot map; the robot must start at the spawn point, which is map (0, 0).
 - Station poses were picked by hand from the map.
-- The trial and tuning samples are small (10 laps, 25 study trials, 5 + 5 validation laps), so differences of a second or two are within run-to-run spread.
+- The trial and tuning samples are small (10 laps, 25 study trials, 10 + 10 validation laps, 3–5 laps per sweep distance), so differences of a second or two are within run-to-run spread.
 - The Fast DDS freeze was observed on one machine and a few runs; the diagnosis is evidence, not a reproduced bug report.
 - Obstacles below the LiDAR plane are invisible to navigation. The depth-camera detector sees them but only reports; Nav2 drove into a 10 cm crate in the blind-spot test.
 - An obstacle that ends up inside the stop field can hold the robot still indefinitely, because the collision monitor also blocks the motions that would free it. The leg timeout turns this into a logged failure, not a recovery.

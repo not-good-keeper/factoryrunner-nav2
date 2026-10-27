@@ -1,20 +1,53 @@
 # Challenges log
 
-One entry per real problem: date, symptom, what I checked, what fixed it.
+This file is in three parts. The first is how I worked within a robot and a stack I was not allowed to change. The second explains the mechanisms behind the main fixes, because a fix is only useful if you know why it works. The third is the dated log of every real problem: the symptom, what I checked, what the cause was, and what I changed, failures and my own bugs included.
 
-## 2026-10-26 — Existing WSL distro was Ubuntu 20.04
+## Working within a fixed robot and a fixed stack
+
+The assignment fixes the robot (the stock TurtleBot3 Waffle) and asks for Nav2 rather than custom navigation. A factory is the same: the robot arrives built, certified and supported by its vendor, and the software team works with the sensors and controllers it has. So I treated "do not modify the robot, do not write a navigation algorithm" as a hard constraint, and looked for what could be done inside it.
+
+| I wanted | Constraint | What I found | What I did |
+|---|---|---|---|
+| Computer vision | No RGB camera on the stock Waffle, and no sensors may be added | Reading the stock model (`gz_waffle.sdf.xacro`) and listing Gazebo's topics showed the robot already carries a RealSense depth camera, rendering at 5 Hz. Nav2's TB3 launch simply never bridges it into ROS. | Bridged the existing camera in a separate launch file and wrote a C++/OpenCV detector on its depth images. It found a 10 cm crate that sits entirely below the LiDAR's scan plane and that Nav2 drove into. Robot unchanged. |
+| Machine learning | No camera images to learn from | The robot does produce lap times, clearances and recoveries, and Nav2's MPPI weights and costmap inflation can be changed at runtime | Applied Bayesian optimisation to four Nav2 parameters, scored by the trial harness and checked on held-out laps. Nav2 still plans and controls; the tuner only sets parameter values. |
+| Different navigation behaviour | No custom navigation algorithms | Most of what I needed was already in Nav2 as configuration: costmap filters, collision-monitor polygons, behaviour-tree timeouts, plugin order | Every behaviour change is a documented config delta (keepout and speed zones, safety fields, A*, layer order, BT timeout). Everything else went in an application layer on top of Nav2: mission controller, leg timeout, trial harness, health monitor. |
+| A stable stack | Nav2 froze under the default middleware | Thread dumps showed the freeze inside Fast DDS, not in Nav2 | Switched to Cyclone DDS, which is an install-time choice, not a code change |
+| A debugger on the frozen process | WSL's `ptrace_scope=1` blocks attaching, and sudo is reserved for package installs | A parent process may trace its own children | Started the Nav2 process under gdb through `ros2 launch --launch-prefix`, with SIGUSR1 set to dump every thread |
+| CI | GitHub Actions is unavailable on the account (billing block) | The CI steps are plain shell commands | `scripts/check.sh` runs the same lint, build and tests on a clean copy of exactly the files git would commit |
+| Moving obstacles | The pallet is a static model, and the `gz` CLI takes 0.6 s per call | Gazebo's Python transport bindings ship with ROS Jazzy | Moved the pallet in 20 Hz `set_pose` steps through the in-process API (0.5 ms per request) |
+| A C++ package beside the Python one | colcon stops searching inside a package, so a nested package is invisible | colcon still builds a package named as an explicit base path | Kept the existing package untouched and added the C++ one as a second base path in the README, `check.sh` and CI |
+
+The pattern in every row: read what the system already provides before adding anything. Several of the most useful pieces (the depth camera, runtime parameters, Gazebo's transport API, colcon base paths) were already there, unused.
+
+## How the main fixes work
+
+**How did I know the freeze was in Fast DDS and not in AMCL?** The symptom pointed at AMCL: the `map → odom` transform vanished. But `ros2 lifecycle get /amcl` returned "Node not found", every Nav2 node had vanished from `ros2 node list`, and yet their shared process was alive, and in one run idle at 0 % CPU. A crashed AMCL does not make every other node disappear, so I looked at the whole process. The thread dump of its 75 threads showed 20 blocked on Fast DDS locks (12 waiting for a send buffer, 7 on a reader mutex in in-process delivery, 1 in discovery cleanup), about 49 executor threads idle waiting for messages, and no Nav2 code on any blocked path. AMCL was a victim: it could not publish because its middleware was stuck. Switching to Cyclone DDS removed the freeze in 9 runs, then in every run after that. Two of three runs froze under Fast DDS, which is evidence, not proof of a Fast DDS bug.
+
+**Why did one late planner reply abort a whole goal?** The default behaviour tree replans once a second by sending `ComputePathToPose` goals to the planner, and waits `default_server_timeout` (20 ms in Jazzy) for the goal to be acknowledged. A late acknowledgement makes the node return FAILURE without setting `compute_path_error_code`. Both recovery branches start with a condition, `WouldAPlannerRecoveryHelp` or `WouldAControllerRecoveryHelp`, that returns SUCCESS only if the error code is one of a short list where clearing a costmap or spinning could plausibly help. An unset code is not on that list, so the tree skipped every recovery and aborted the goal, about 30 ms after the warning. Raising the timeout to 200 ms gives the planner time to answer. The deeper lesson is that the recovery logic is gated on error codes, so any failure that does not set one bypasses recovery entirely.
+
+**Why does the keepout filter's position relative to the inflation layer matter?** Costmap plugins run in order, each writing into a shared master grid. The inflation layer looks for lethal cells in that grid and spreads a decaying cost around them. With the keepout filter after inflation, the forklift lane was written as lethal only after inflation had run, so it had no cost band around it: the planner saw free space right up to the lane's edge and planned along it, and MPPI, which cuts corners, put the robot's body over the corner. With the filter before inflation, the lane gets the same 0.7 m band as a wall. A probe of the live costmap confirmed the band, and the corner failure went from 2 in 11 runs to 0 in 5 after the change.
+
+**How does MPPI work, and what do the tuned weights control?** MPPI (model predictive path integral control) samples 2000 noisy velocity sequences around its previous best, rolls each one forward with the robot's motion model for 56 steps of 0.05 s (a 2.8 s horizon), and scores every rollout with a set of critics. It then averages the sequences, weighting each by how good its score is (with `temperature` 0.3 setting how strongly the best ones dominate), and sends the first velocity of that average. The study tuned three things around it: `vx_max`, the forward speed cap; the PathFollow critic's weight, which rewards rollouts that make progress along the global path; and the Cost critic's weight, which penalises rollouts passing through high costmap cost near obstacles. The fourth, the local costmap's `cost_scaling_factor`, sets how fast inflation cost decays with distance from an obstacle, so it changes what the Cost critic sees. The tuned set had a slightly lower speed cap than the default and was still 3.5 s faster per lap (median of 10 laps each). Heavier path-following and obstacle-cost weights giving fewer corrections is a plausible reason, which I have not tested.
+
+**Why did the robot deadlock in the stop field, and how would I fix it?** The collision monitor sits between the velocity smoother and the robot. When a scan point falls inside the `StopZone` box, it replaces every outgoing command with zero, whatever its direction. In the 1.2 m sweep the pallet ended up inside the box, so the commands that would have reversed the robot out were zeroed too, and nothing else could move it. The leg timeout turned this into a logged `CANCELED` after 120 s. On a real robot I would make the stop field depend on the direction of travel. Jazzy's collision monitor supports velocity polygons, which pick a shape from the current command, so reversing away from an obstacle in front stays allowed. I would add a stop-state timeout that asks an operator for help, and keep a hardware e-stop below all of it.
+
+**What does the TPE sampler do, and why validate on a held-out spot?** Optuna's TPE (tree-structured Parzen estimator) starts with 10 random trials; the study's trial 0 was the default configuration, so trials 1–9 were random, which is where most of the bad scores are. After that it splits the trials so far into a good group and a bad group by score, models how each parameter is distributed in each group, and proposes values that are likely under the good model and unlikely under the bad one. The held-out check matters for two reasons. With 25 noisy trials, the best score is partly luck: the winner is the trial whose noise happened to be favourable, so its score is biased low. Re-measuring both configurations on fresh laps removes that bias. And tuning against one pallet position can fit that position; a position the study never saw tests whether the gain carries over. I also alternated default and tuned laps, so any slow drift in the simulator affects both equally.
+
+## Log
+
+### 2026-10-26 — Existing WSL distro was Ubuntu 20.04
 
 - **Symptom:** the WSL home I had been using is Ubuntu 20.04. ROS 2 Jazzy only ships binaries for Ubuntu 24.04, and Humble (22.04) uses Gazebo Classic for the TB3 sim.
-- **Plan:** install a separate Ubuntu-24.04 distro alongside it rather than upgrading the old one in place. Update this entry once it works.
+- **Fix:** installed a separate Ubuntu-24.04 distro alongside it rather than upgrading the old one in place. Everything in this repository was built and run on that distro.
 
-## 2026-10-26 — Keepout and speed zones silently did nothing
+### 2026-10-26 — Keepout and speed zones silently did nothing
 
 - **Symptom:** after adding the keepout and speed filters, the costmaps logged `KeepoutFilter: Filter mask was not received` every few seconds and the planned path still went straight through the forklift lane.
 - **Checked:** `ros2 topic info /keepout_filter_mask -v` showed the mask server publishing (reliable, transient local). The filter info server was publishing on `/keepout_filter_info`. The costmap log said it was subscribing to `"keepout_filter_info"`.
 - **Cause:** the topic names in `nav2_params.yaml` were relative. The costmaps run as `/global_costmap/global_costmap` and `/local_costmap/local_costmap`, so they were listening on `/global_costmap/keepout_filter_info`, which nothing publishes. The same applied to the speed filter's `speed_limit` output, which the controller reads from `/speed_limit`.
 - **Fix:** made every filter topic absolute (`/keepout_filter_info`, `/speed_filter_info`, `/speed_limit`, and the mask topics in the launch file). Both costmaps then logged `Received filter mask`; the next planned path crossed x = 2.4 m at y ≈ −2.8 m, below the lane, and `/speed_limit` published 40 % when the robot entered the CNC zone.
 
-## 2026-10-26 — Missions froze or aborted partway through (two separate faults)
+### 2026-10-26 — Missions froze or aborted partway through (two separate faults)
 
 - **Symptom:** on the RTX 3060 machine, leg 1 succeeded, then the robot sat still on leg 2 with 9.61 m to go, and `tf2_echo map odom` reported that `map` did not exist. The cloud VM had failed on the same leg with `Timed out while waiting for action server to acknowledge goal request for compute_path_to_pose`. I suspected AMCL.
 - **Reproduced headless** with the committed config (Fast DDS 2.14.7, `default_server_timeout: 20`). Gazebo's real-time factor was 1.0, so the CPU was keeping up. None of 3 runs completed: 2 ended with the Nav2 container frozen, 1 aborted on leg 1.
@@ -39,7 +72,7 @@ Runs in `results/missions.csv` (all headless):
 | 20261026-164746, -165226, -165651 | Cyclone | 200 ms | 4/4 each, stale Gazebo server alive |
 | 20261026-170336, -170600, -170819 | Cyclone | 200 ms | 4/4 each, one Gazebo server |
 
-## 2026-10-26 — Robot stuck on the keepout lane's corner
+### 2026-10-26 — Robot stuck on the keepout lane's corner
 
 - **Symptom:** on leg 4 (INSPECTION → DOCK), two runs stopped with exactly 4.01 m of path left: one under Fast DDS (162513) and one under Cyclone with both fixes above (171949). The controller logged `Optimizer fail to compute path` until `Controller patience exceeded`, and the spin recovery quit with `Collision Ahead`.
 - **Checked:** with the robot still stuck in the Cyclone run, `tf2_echo map base_link` gave (2.778, 2.503). The keepout lane covers x 2.0–2.8, y −2.5 to 2.5, so the robot's centre was 3 mm from the lane's corner and its 0.22 m radius overlapped lethal cells. MPPI treats every trajectory from there as a collision.
@@ -47,26 +80,26 @@ Runs in `results/missions.csv` (all headless):
 - **Fix:** moved `keepout_filter` before `inflation_layer` in both costmaps. A probe of the live global costmap afterwards read (OccupancyGrid scale) 100 inside the lane; 99 at 0.1 m above its top edge and 0.2 m beside its side edge; 78 at 0.3 m above or below it; 58 at 0.4 m beside it; 43 at 0.5 m above it. I did not probe the old order, so there is no measured "before" value.
 - **Result:** 5 of 5 headless missions completed 4/4 (sim time 91.2–92.2 s) with no MPPI failures and no recoveries (runs 172350, 172606, 172815, 173029, 173237). Before the change it failed in 2 of the 11 runs that got as far as that corner on leg 4 (counting one GUI run on the user's machine), so 0 of 5 is consistent with a fix but is not yet strong evidence; the trial runs will add more.
 
-## 2026-10-27 — Gazebo's create and remove replies don't confirm anything
+### 2026-10-27 — Gazebo's create and remove replies don't confirm anything
 
 - **Symptom:** while testing `factoryrunner/obstacle.py`, spawning a second box with the same name and removing a box that was already gone both reported success. `ros_gz_sim create` printed `Entity creation successful.` and exited 0; `/world/depot/remove` replied `data: true`.
 - **Checked:** the Gazebo server log showed `Entity named [pallet_box] of type [2] not found, so not removed.` for the second removal, so the server knew; the service reply was sent when the request was queued, before the world processed it. I then looked for a way to confirm the entity list: `gz model --list` timed out on `/world/depot/state`, and the headless server publishes no `scene/info` or `pose/info`, because it runs without a scene broadcaster.
 - **Decision:** the helper reports "requested" rather than "spawned", raises only when the command itself fails, and the check moves to the robot's side. In a leg-2 test with the box 3 m ahead on the plan, the global costmap read 99 (inscribed) at the box centre, which also confirms the map → Gazebo offset of (−8, 0); every plan after the first two kept about 0.9–1.0 m from the box, and the leg took 29.9 s against about 29.3 s without it. With the box 1.2 m ahead, the collision monitor reported SlowdownZone and briefly FootprintApproach, the robot passed with about 9 cm of air gap, and the leg took 54.4 s.
 
-## 2026-10-27 — First 10-lap trial run cut off after 35 legs
+### 2026-10-27 — First 10-lap trial run cut off after 35 legs
 
 - **Symptom:** `trials_20261026-193027.csv` stops at lap 9, leg 3, and the trial runner ended in an `ExternalShutdownException` traceback.
 - **Cause:** my own test script started every run under `timeout 900`, a 15-minute cap meant for single missions; ten laps take about 16 minutes, so `timeout` signalled the runner mid-leg. Nav2 was fine: all 35 legs it finished had succeeded.
 - **Fix:** longer cap for multi-lap runs, and `trial_runner` now reports where the finished legs are and exits with 130 instead of a traceback. The file stays in `results/` as an interrupted run; the complete run is `trials_20261026-194747.csv` (10 laps, 40/40 legs succeeded, pallet on laps 3, 6 and 9).
 
-## 2026-10-27 — One tuning trial ran without its pallet
+### 2026-10-27 — One tuning trial ran without its pallet
 
 - **Symptom:** in the D13 study, trial 16 logged `obstacle spawn failed: ... ros_gz_sim create ... timed out after 30 seconds`, and its CNC_CELL row has `obstacle=failed`.
 - **What it means for the study:** that lap measured the parameters without the obstacle, so its objective (95.8) is not comparable with the others. It was not the best trial and was not used for validation; the best trial (23, objective 88.7) had its pallet. The TPE sampler still learned from trial 16, which may have nudged later samples slightly.
 - **Cause:** not found. The same command spawned the pallet in the other 24 trials and in every earlier run, typically in under a second. `ros2 run` starts a Python process and a ROS node for each spawn, so a slow DDS discovery or a stall on a busy machine is the likely suspect. UNVERIFIED.
 - **Handling:** the trial runner already records the failure in the CSV instead of hiding it, which is how it was caught. A retry, or spawning through Gazebo's in-process transport as the moving obstacle does, would make it more robust; not done before the freeze.
 
-## 2026-10-27 — A 10 s stall takes Nav2 down for good
+### 2026-10-27 — A 10 s stall takes Nav2 down for good
 
 - **Test:** to check the new health monitor, I froze the process hosting all Nav2 nodes with `SIGSTOP` for 10 s during the first leg of a mission, then resumed it (`results/freeze_test/`).
 - **What the monitor saw:** WARN after 1.3 s (`map → odom` stale), ERROR after 2.3 s (no lifecycle answer from any of the seven watched nodes) and after 3.3 s (`map → odom` 3.3 s old). It went back to OK 4.5 s after the resume, then to ERROR again 20 s after the freeze.
@@ -74,14 +107,14 @@ Runs in `results/missions.csv` (all headless):
 - **Outcome:** the mission controller's leg timeout ended the hung leg as `CANCELED` after 120 s, and the cancel request gave up after its 10 s limit (130.0 s in total) instead of blocking. Without the task-2 timeout, the controller would have waited forever on a dead stack.
 - **Takeaway:** any stall over Nav2's 4 s bond timeout (a frozen middleware, an overloaded machine) is fatal to navigation by design. That makes outside monitoring, and a leg timeout in the application, necessary rather than optional. A supervisor that calls the lifecycle managers' reset/startup service could recover automatically; not built.
 
-## 2026-10-27 — Stop field holds the robot next to a close obstacle
+### 2026-10-27 — Stop field holds the robot next to a close obstacle
 
 - **Symptom:** in the obstacle-distance sweep, the third lap with the pallet dropped about 1 m ahead ended `CANCELED` at the 120 s leg timeout. The trial row shows 108.6 s in the collision monitor's stop state, one stop event, and a closest scan return of 0.32 m (`results/obstacle_sweep_20261026-213234/d1.2/`).
 - **Cause:** the pallet ended up inside the `StopZone` polygon. In that state the collision monitor zeroes every velocity command from the controller, including the backing-up or turning that would move the robot away, so neither MPPI nor the behaviour tree's recoveries could get it out. The robot stayed stopped until the trial runner's leg timeout canceled the goal.
 - **Fix:** not changed. The stop box is there to stop the robot, and making it smaller or letting commands through near obstacles weakens the safety layer this project is demonstrating. The leg timeout already turns the deadlock into a logged failure instead of a robot waiting forever. Options for later: a smaller stop box behind the robot so reversing stays possible, or a recovery that asks for operator help when the stop state lasts longer than a few seconds.
-- **Where the boundary is:** 0 of 9 laps deadlocked with the pallet dropped at the 3.0, 2.0 and 1.5 m settings (logged drops at 1.15 m or more), 1 of 3 at the 1.2 m setting (logged drops 0.98–1.17 m).
+- **Where the boundary is:** after two sweep runs, 0 of 15 laps deadlocked with the pallet dropped at the 3.0, 2.0 and 1.5 m settings (logged drops at 1.15 m or more) and 1 of 5 at the 1.2 m setting (logged drops 0.91–1.17 m).
 
-## 2026-10-27 — Two attribute names that broke their base classes
+### 2026-10-27 — Two attribute names that broke their base classes
 
 - **Symptom 1:** the first run of the health monitor died at once with `AttributeError: 'str' object has no attribute '_executor_event'` inside the rclpy executor.
 - **Cause 1:** I had stored the lifecycle service clients in `self._clients`. `rclpy.node.Node` keeps its own list of clients under that name, so the executor iterated over my dict's keys (node names) instead of client objects. Renamed to `_state_clients`; found by running the node against the live sim before committing.
@@ -89,8 +122,21 @@ Runs in `results/missions.csv` (all headless):
 - **Cause 2:** the mover thread kept its stop flag in `self._stop`. `threading.Thread` has a private `_stop()` method that `join()` calls, so the flag replaced it. Renamed to `_halt`, added a regression test that stops and joins a mover, and reran the three laps (`trials_20261026-215920.csv`, 12/12 legs).
 - **Lesson:** both were private names shadowed on a framework base class, and neither showed up in unit tests of the pure logic. Only running the real thing caught them.
 
-## 2026-10-27 — Background jobs that would not stop
+### 2026-10-27 — Background jobs that would not stop
 
 - **Symptoms:** three times in one night a process ignored a clean stop. A `ros2 bag record` started with `&` kept running after `pkill -INT` and never wrote its metadata. The first Docker run finished its mission (4/4, 91.9 s) but the container never exited until an outer 20-minute timeout killed it. And earlier, a `gz sim` server ignored `SIGTERM` and kept its world alive under later launches.
 - **Cause (first two):** bash starts background jobs of a non-interactive shell with `SIGINT` ignored. The recorder and the Docker entrypoint's `ros2 launch` were both such jobs, so `SIGINT` did nothing, and the entrypoint's exit trap then waited for the launch for ever. `docker top` on a detached container showed the mission process gone and the whole simulation still up, which pointed at the trap.
 - **Fix:** stop background ROS processes with `SIGTERM`, which `ros2 launch` and `ros2 bag` both handle, and never wait without a limit. The entrypoint now sends `SIGTERM`, waits at most 15 s and exits with the program's status; as the container's PID 1, anything still running goes with it. The local stop script escalates to `SIGKILL` and checks that nothing is left before the next launch, which handles the stubborn `gz sim` case.
+
+### 2026-10-27 — Computer vision without changing the robot
+
+- **Problem:** I wanted a perception component, because the role covers computer vision, but the stock Waffle has no RGB camera and the assignment does not allow modifying the robot. Adding a camera to the model was out.
+- **What I checked:** instead of assuming there was no camera, I read the robot's own model file (`nav2_minimal_tb3_sim/urdf/gz_waffle.sdf.xacro`) and listed Gazebo's topics. The Waffle already has a RealSense depth sensor (`intel_realsense_r200_depth`, 320 × 240, 60° field of view, 5 Hz, up to 5 m), and Gazebo was already rendering it, with no subscribers. Nav2's TB3 launch just never bridges it into ROS.
+- **What I did:** a separate `launch/vision.launch.py` bridges the existing depth image and camera info, and a new C++ package, `factoryrunner_vision`, turns each frame into obstacles with OpenCV. Two details mattered. The camera's height comes from measurement, not the model file: floor pixels in live frames put it at 0.226 m (10th–90th percentile 0.226–0.227), where I had guessed 0.2. And the node publishes in the image's own frame, `camera_depth_frame`, instead of a hard-coded one.
+- **What it showed:** the 2D LiDAR scans a single plane about 0.17 m up, so anything lower is invisible to it and therefore to Nav2's costmaps. With a 10 cm crate on the path, the camera flagged it 2.83 m ahead while the LiDAR's forward sector never returned anything closer than 2.47 m, and the robot drove into it. The detector only observes; feeding it into the costmaps is the next step.
+
+### 2026-10-27 — A C++ package that colcon would not find
+
+- **Problem:** the C++ detector needs an `ament_cmake` package, but this repository is itself an `ament_python` package, and I did not want to restructure code that already worked.
+- **What I checked:** a throwaway workspace with a C++ package nested inside a Python one showed that colcon lists only the outer package: once it finds a package it stops searching inside it. Naming the nested folder as an extra base path made colcon find both.
+- **What I did:** the C++ package lives in `factoryrunner_vision/`, and the build command, `scripts/check.sh` and CI all pass `--base-paths src src/factoryrunner-nav2/factoryrunner_vision`. `rosdep` has the same blind spot, so CI's dependency step names the folder too. No existing file moved.
