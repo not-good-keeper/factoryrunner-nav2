@@ -103,7 +103,7 @@ colcon build --symlink-install --base-paths src src/factoryrunner-nav2/factoryru
 source install/setup.bash
 ```
 
-The C++ package `factoryrunner_vision` lives inside the Python package's folder, where colcon stops searching, which is why it appears as a second base path. The first launch downloads the depot model from Gazebo Fuel, so it needs an internet connection once.
+The C++ package `factoryrunner_vision` lives inside the Python package's folder, where colcon stops searching, which is why it appears as a second base path. The first launch downloads the depot model from Gazebo Fuel, so it needs an internet connection once. This sequence, from `git clone` through the build and `scripts/check.sh`, also runs cleanly as an ordinary user in a bare `ubuntu:24.04` container, where the setup script takes close to an hour, nearly all of it package downloads.
 
 For headless runs without a ROS installation, the Docker image builds the same two packages on `ros:jazzy-ros-base` and runs a single program against a headless simulation, writing its results to the mounted folder:
 
