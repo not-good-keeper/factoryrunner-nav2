@@ -1,0 +1,5 @@
+robot at (4.21, -3.82); low_box (0.4 x 0.4 x 0.10 m) at (6.50, -1.70)
+vision reports total 0, matching the crate 0
+depth camera: no reports
+LiDAR forward sector while the crate was 0.5-2.5 m away: closest return 1.04 m over 105 scans
+robot centre min distance to crate centre: 0.64 m (crate half-width 0.20, robot radius 0.22)
