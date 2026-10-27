@@ -29,8 +29,8 @@ DEFAULT_MAP = Path('/opt/ros/jazzy/share/nav2_bringup/maps/depot.yaml')
 
 
 def grey_for_limit(percent):
-    value = 100 - percent
-    occupancy = SPEED_FREE_THRESH + value / 100 * (SPEED_OCCUPIED_THRESH - SPEED_FREE_THRESH)
+    mask_value = 100 - percent
+    occupancy = SPEED_FREE_THRESH + mask_value / 100 * (SPEED_OCCUPIED_THRESH - SPEED_FREE_THRESH)
     return round(255 * (1 - occupancy))
 
 

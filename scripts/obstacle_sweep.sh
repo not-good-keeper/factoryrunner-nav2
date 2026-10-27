@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Drop the pallet at shrinking distances and log every lap (D16). Needs the sim running,
+# Drop the pallet at shrinking distances and log every lap. Needs the sim running,
 # the robot at the dock and Nav2 up, as for trial_runner:
 #   bash scripts/obstacle_sweep.sh [laps per distance] [distances...]
 #   bash scripts/obstacle_sweep.sh 3 3.0 2.0 1.5 1.2

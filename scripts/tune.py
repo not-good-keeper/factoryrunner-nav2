@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tune four Nav2 parameters with Optuna, one trial_runner lap per trial (D13).
+"""Tune four Nav2 parameters with Optuna, one trial_runner lap per trial.
 
 Start a fresh headless sim first (the robot must be at the dock), then, from the venv:
     source ~/fr_venv/bin/activate
@@ -239,7 +239,7 @@ def cmd_report(args):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description='Nav2 parameter study (D13).')
+    parser = argparse.ArgumentParser(description='Nav2 parameter study.')
     parser.add_argument('--db', type=Path, default=RESULTS / 'tuning.db',
                         help='Optuna SQLite file (a scratch one for dry runs)')
     sub = parser.add_subparsers(dest='command', required=True)

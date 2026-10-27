@@ -25,7 +25,7 @@ import matplotlib
 from matplotlib.patches import Patch
 import matplotlib.pyplot as plt
 
-# Reference categorical slots 1 and 2 (validated as a pair for colour-vision deficiency).
+# Blue and orange: a pair that stays distinguishable for the common colour-vision deficiencies.
 NORMAL = '#2a78d6'
 OBSTACLE = '#eb6834'
 INK = '#0b0b0b'

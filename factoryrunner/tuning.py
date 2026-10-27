@@ -1,6 +1,6 @@
 """Search space and objective for the Nav2 parameter study (scripts/tune.py). No ROS imports.
 
-The objective weights were fixed before the study ran (PLAN.md, D13) and are stated in the
+The objective weights were fixed before the study ran and are stated in the
 README; changing them after seeing results would make the study meaningless.
 """
 

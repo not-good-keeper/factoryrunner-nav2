@@ -48,10 +48,10 @@ def test_defaults_match_nav2_params():
         node = params
         for key in p.node.split('/'):
             node = node[key]
-        value = node['ros__parameters']
+        configured = node['ros__parameters']
         for key in p.name.split('.'):
-            value = value[key]
-        assert value == pytest.approx(p.default), p.name
+            configured = configured[key]
+        assert configured == pytest.approx(p.default), p.name
 
 
 def test_mann_whitney_complete_separation_5_v_5():

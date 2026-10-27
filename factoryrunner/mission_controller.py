@@ -100,8 +100,7 @@ def run_leg(navigator, mission, leg, station, leg_timeout_s, on_tick=None):
             print(f'      {feedback.distance_remaining:5.2f} m to go, recoveries {recoveries}')
             last_print = now
 
-    result = navigator.getResult()
-    return result, start, sim_seconds(navigator), recoveries
+    return navigator.getResult(), start, sim_seconds(navigator), recoveries
 
 
 def main(argv=None):

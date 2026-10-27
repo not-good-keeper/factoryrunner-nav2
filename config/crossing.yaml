@@ -13,7 +13,7 @@ mission:
   # laps, obstacle_laps and obstacle are read by trial_runner; mission_controller drives one loop.
   laps: 3
   obstacle_laps: [1, 2, 3]
-  # Moving obstacle (D8): spawns at the shelf edge beside the CNC_CELL path and crosses it to the
+  # Moving obstacle: spawns at the shelf edge beside the CNC_CELL path and crosses it to the
   # open side of the aisle at walking pace, so the robot has to react while it is in motion.
   obstacle:
     leg: CNC_CELL

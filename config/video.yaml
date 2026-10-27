@@ -1,4 +1,4 @@
-# Video mode (D18): one lap, pallet dropped 1.5 m ahead so the slowdown field visibly fires.
+# Video mode: one lap, pallet dropped 1.5 m ahead so the slowdown field visibly fires.
 # ros2 run factoryrunner trial_runner --ros-args -p mission_file:=$(ros2 pkg prefix --share factoryrunner)/config/video.yaml
 #
 # Map-frame poses on Nav2's depot map. The robot spawns at Gazebo (-8, 0), which is

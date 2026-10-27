@@ -1,4 +1,4 @@
-"""Move the spawned pallet across the aisle while the robot drives (D8 moving obstacle).
+"""Move the spawned pallet across the aisle while the robot drives.
 
 The pallet is a static model, so it is teleported in small steps through the world's
 set_pose service rather than simulated with physics. Requests go through Gazebo's in-process
