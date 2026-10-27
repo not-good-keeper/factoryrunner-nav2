@@ -1,7 +1,8 @@
 """Depot world + default TurtleBot3 waffle + Nav2, with FactoryRunner's params and zone masks.
 
 The stock tb3_simulation_launch.py does all of the robot and Nav2 bringup; this file only
-swaps in the depot world/map and our params, and adds the costmap filter mask servers.
+swaps in the depot world and map and this package's params, and adds the costmap filter
+mask servers.
 """
 
 import os
