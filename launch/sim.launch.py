@@ -8,12 +8,64 @@ mask servers.
 import os
 
 from ament_index_python.packages import get_package_share_directory
+from factoryrunner.params_overlay import write_merged
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+
+
+DEPTH_CAMERA = ('/world/depot/model/turtlebot3_waffle/link/camera_link/sensor/'
+                'intel_realsense_r200_depth/depth_image/points')
+
+
+def _enabled(context, name):
+    return LaunchConfiguration(name).perform(context).lower() in ('true', '1')
+
+
+def _nav2(context, pkg, bringup, tb4_sim):
+    """Nav2 bringup, with the opt-in overlays merged into the params when asked for."""
+    params = os.path.join(pkg, 'config', 'nav2_params.yaml')
+    overlays = [os.path.join(pkg, 'config', 'overlays', f'{name}.yaml')
+                for name in ('depth_costmap', 'velocity_stop') if _enabled(context, name)]
+    if overlays:
+        params = write_merged(params, overlays)
+
+    actions = [IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(os.path.join(bringup, 'launch', 'tb3_simulation_launch.py')),
+        launch_arguments={
+            'world': os.path.join(tb4_sim, 'worlds', 'depot.sdf'),
+            'map': os.path.join(bringup, 'maps', 'depot.yaml'),
+            'params_file': params,
+            'rviz_config_file': os.path.join(pkg, 'config', 'factoryrunner.rviz'),
+            # Gazebo (-8, 0) is where the depot map was recorded from, i.e. map (0, 0).
+            'x_pose': '-8.0',
+            'y_pose': '0.0',
+            'headless': LaunchConfiguration('headless'),
+            'use_rviz': LaunchConfiguration('use_rviz'),
+        }.items(),
+    )]
+
+    if _enabled(context, 'depth_costmap'):
+        sim_time = {'use_sim_time': True}
+        actions += [
+            Node(package='ros_gz_bridge', executable='parameter_bridge',
+                 name='depth_points_bridge',
+                 arguments=[f'{DEPTH_CAMERA}@sensor_msgs/msg/PointCloud2[gz.msgs.PointCloudPacked'],
+                 remappings=[(DEPTH_CAMERA, '/camera/depth/points')], parameters=[sim_time]),
+            Node(package='factoryrunner_vision', executable='depth_cloud_relay',
+                 parameters=[sim_time]),
+            # Where Gazebo actually renders the depth sensor: camera link plus sensor offset in
+            # the robot model, and 0.226 m up as measured from floor points. The description's
+            # own camera_depth_frame sits lower and is an optical frame, so it cannot be used.
+            Node(package='tf2_ros', executable='static_transform_publisher',
+                 arguments=['--x', '0.133', '--y', '-0.094', '--z', '0.226',
+                            '--frame-id', 'base_footprint', '--child-frame-id', 'depth_sensor'],
+                 parameters=[sim_time]),
+        ]
+    return actions
 
 
 def generate_launch_description():
@@ -21,24 +73,7 @@ def generate_launch_description():
     bringup = get_package_share_directory('nav2_bringup')
     tb4_sim = get_package_share_directory('nav2_minimal_tb4_sim')
 
-    headless = LaunchConfiguration('headless')
-    use_rviz = LaunchConfiguration('use_rviz')
     use_zones = LaunchConfiguration('use_zones')
-
-    nav2 = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(bringup, 'launch', 'tb3_simulation_launch.py')),
-        launch_arguments={
-            'world': os.path.join(tb4_sim, 'worlds', 'depot.sdf'),
-            'map': os.path.join(bringup, 'maps', 'depot.yaml'),
-            'params_file': os.path.join(pkg, 'config', 'nav2_params.yaml'),
-            'rviz_config_file': os.path.join(pkg, 'config', 'factoryrunner.rviz'),
-            # Gazebo (-8, 0) is where the depot map was recorded from, i.e. map (0, 0).
-            'x_pose': '-8.0',
-            'y_pose': '0.0',
-            'headless': headless,
-            'use_rviz': use_rviz,
-        }.items(),
-    )
 
     # Mask servers for the keepout lane and the CNC speed zone. Topics are absolute because
     # the costmaps live in their own namespaces and would otherwise resolve them relatively.
@@ -114,6 +149,10 @@ def generate_launch_description():
         DeclareLaunchArgument('use_rviz', default_value='True'),
         DeclareLaunchArgument('use_zones', default_value='True',
                               description='Start the keepout and speed zone mask servers'),
-        nav2,
+        DeclareLaunchArgument('depth_costmap', default_value='False',
+                              description='Add the depth camera as an obstacle source'),
+        DeclareLaunchArgument('velocity_stop', default_value='False',
+                              description='Use a stop field that follows the commanded motion'),
+        OpaqueFunction(function=_nav2, args=[pkg, bringup, tb4_sim]),
         *zone_nodes,
     ])

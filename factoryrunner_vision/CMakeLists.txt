@@ -27,7 +27,10 @@ target_link_libraries(depth_obstacle_detector depth_obstacles)
 ament_target_dependencies(depth_obstacle_detector
   rclcpp sensor_msgs geometry_msgs visualization_msgs std_msgs cv_bridge)
 
-install(TARGETS depth_obstacles depth_obstacle_detector
+add_executable(depth_cloud_relay src/depth_cloud_relay.cpp)
+ament_target_dependencies(depth_cloud_relay rclcpp sensor_msgs)
+
+install(TARGETS depth_obstacles depth_obstacle_detector depth_cloud_relay
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME})

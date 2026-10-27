@@ -1,0 +1,45 @@
+# Opt-in with sim.launch.py depth_costmap:=True. Adds the robot's own depth camera as a second
+# obstacle source next to the LiDAR, so obstacles below the LiDAR's scan plane (about 0.17 m)
+# reach both costmaps and the collision monitor. The cloud comes from factoryrunner_vision's
+# depth_cloud_relay. Points under 4 cm are the floor and are ignored.
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      voxel_layer:
+        observation_sources: scan depth
+        depth:
+          topic: /camera/depth/points_costmap
+          data_type: PointCloud2
+          marking: True
+          clearing: True
+          min_obstacle_height: 0.04
+          max_obstacle_height: 2.0
+          obstacle_max_range: 2.5
+          obstacle_min_range: 0.0
+          raytrace_max_range: 3.0
+          raytrace_min_range: 0.0
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      obstacle_layer:
+        observation_sources: scan depth
+        depth:
+          topic: /camera/depth/points_costmap
+          data_type: PointCloud2
+          marking: True
+          clearing: True
+          min_obstacle_height: 0.04
+          max_obstacle_height: 2.0
+          obstacle_max_range: 2.5
+          obstacle_min_range: 0.0
+          raytrace_max_range: 3.0
+          raytrace_min_range: 0.0
+collision_monitor:
+  ros__parameters:
+    observation_sources: ["scan", "depth"]
+    depth:
+      type: "pointcloud"
+      topic: "/camera/depth/points_costmap"
+      min_height: 0.04
+      max_height: 2.0
+      enabled: True

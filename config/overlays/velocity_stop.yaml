@@ -1,0 +1,42 @@
+# Opt-in with sim.launch.py velocity_stop:=True. Replaces the fixed stop box with one that
+# depends on the commanded motion. With the fixed box, an obstacle that ends up inside it
+# blocks every command, including backing away, and the robot can stay stopped indefinitely.
+# Here the box points the way the robot is going: forward keeps the original box, reversing
+# looks mostly behind, and turning on the spot only guards the body itself. The collision
+# monitor uses the first entry whose velocity ranges contain the current command.
+collision_monitor:
+  ros__parameters:
+    polygons: ["VelocityStop", "SlowdownZone", "FootprintApproach"]
+    VelocityStop:
+      type: "velocity_polygon"
+      action_type: "stop"
+      min_points: 4
+      visualize: True
+      enabled: True
+      polygon_pub_topic: "polygon_stop"
+      holonomic: False
+      velocity_polygons: ["rotation", "forward", "backward", "stopped"]
+      rotation:
+        points: "[[0.23, 0.23], [0.23, -0.23], [-0.23, -0.23], [-0.23, 0.23]]"
+        linear_min: -0.05
+        linear_max: 0.05
+        theta_min: -2.0
+        theta_max: 2.0
+      forward:
+        points: "[[0.30, 0.20], [0.30, -0.20], [-0.25, -0.20], [-0.25, 0.20]]"
+        linear_min: 0.0
+        linear_max: 1.0
+        theta_min: -2.0
+        theta_max: 2.0
+      backward:
+        points: "[[0.12, 0.20], [0.12, -0.20], [-0.35, -0.20], [-0.35, 0.20]]"
+        linear_min: -1.0
+        linear_max: 0.0
+        theta_min: -2.0
+        theta_max: 2.0
+      stopped:
+        points: "[[0.30, 0.20], [0.30, -0.20], [-0.25, -0.20], [-0.25, 0.20]]"
+        linear_min: -1.0
+        linear_max: 1.0
+        theta_min: -2.0
+        theta_max: 2.0
