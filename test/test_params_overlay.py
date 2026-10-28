@@ -27,7 +27,8 @@ def test_overlay_must_be_a_mapping(tmp_path):
 def test_repo_overlays_only_touch_existing_nodes(overlay, tmp_path):
     base = yaml.safe_load((REPO / 'config' / 'nav2_params.yaml').read_text())
     for node in yaml.safe_load(overlay.read_text()):
-        assert node in base, f'{overlay.name} adds unknown node {node}'
+        # slam_toolbox only runs in SLAM mode, so it has no section in the base file.
+        assert node in base or node == 'slam_toolbox', f'{overlay.name} adds unknown node {node}'
     merged = yaml.safe_load(Path(write_merged(REPO / 'config' / 'nav2_params.yaml', [overlay],
                                               out_dir=tmp_path)).read_text())
     assert merged['bt_navigator'] == base['bt_navigator']

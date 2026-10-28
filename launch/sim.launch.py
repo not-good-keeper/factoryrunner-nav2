@@ -29,7 +29,7 @@ def _nav2(context, pkg, bringup, tb4_sim):
     """Nav2 bringup, with the opt-in overlays merged into the params when asked for."""
     params = os.path.join(pkg, 'config', 'nav2_params.yaml')
     overlays = [os.path.join(pkg, 'config', 'overlays', f'{name}.yaml')
-                for name in ('depth_costmap', 'velocity_stop') if _enabled(context, name)]
+                for name in ('depth_costmap', 'velocity_stop', 'slam') if _enabled(context, name)]
     if overlays:
         params = write_merged(params, overlays)
 
@@ -37,7 +37,8 @@ def _nav2(context, pkg, bringup, tb4_sim):
         PythonLaunchDescriptionSource(os.path.join(bringup, 'launch', 'tb3_simulation_launch.py')),
         launch_arguments={
             'world': os.path.join(tb4_sim, 'worlds', 'depot.sdf'),
-            'map': os.path.join(bringup, 'maps', 'depot.yaml'),
+            'map': LaunchConfiguration('map'),
+            'slam': LaunchConfiguration('slam'),
             'params_file': params,
             'rviz_config_file': os.path.join(pkg, 'config', 'factoryrunner.rviz'),
             # Gazebo (-8, 0) is where the depot map was recorded from, i.e. map (0, 0).
@@ -149,6 +150,10 @@ def generate_launch_description():
         DeclareLaunchArgument('use_rviz', default_value='True'),
         DeclareLaunchArgument('use_zones', default_value='True',
                               description='Start the keepout and speed zone mask servers'),
+        DeclareLaunchArgument('map', default_value=os.path.join(bringup, 'maps', 'depot.yaml'),
+                              description='Map to localize against'),
+        DeclareLaunchArgument('slam', default_value='False',
+                              description='Build a map with slam_toolbox instead of using one'),
         DeclareLaunchArgument('depth_costmap', default_value='False',
                               description='Add the depth camera as an obstacle source'),
         DeclareLaunchArgument('velocity_stop', default_value='False',
