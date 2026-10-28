@@ -1,0 +1,106 @@
+FACTORYRUNNER | JOB-001 | run 20261028-034937
+[INFO] [1793159393.412016753] [factoryrunner_mission]: Nav2 is ready for use!
+[INFO] [1793159393.412839882] [factoryrunner_mission]: Navigating to goal: 4.5 -4.0...
+[1/4] Goal accepted: RAW_MATERIAL (4.50, -4.00)
+       7.06 m to go, recoveries 0
+       7.01 m to go, recoveries 0
+       6.96 m to go, recoveries 0
+       6.32 m to go, recoveries 0
+       6.11 m to go, recoveries 0
+       5.37 m to go, recoveries 0
+       5.18 m to go, recoveries 0
+       4.68 m to go, recoveries 0
+       4.00 m to go, recoveries 0
+       3.45 m to go, recoveries 0
+       2.96 m to go, recoveries 0
+       2.45 m to go, recoveries 0
+       1.98 m to go, recoveries 0
+       1.58 m to go, recoveries 0
+       1.10 m to go, recoveries 0
+       0.60 m to go, recoveries 0
+       0.25 m to go, recoveries 0
+[1/4] RAW_MATERIAL: SUCCEEDED in 19.1 s
+[INFO] [1793159412.466645495] [factoryrunner_mission]: Navigating to goal: 12.0 1.28...
+[2/4] Goal accepted: CNC_CELL (12.00, 1.28)
+       9.59 m to go, recoveries 0
+       9.45 m to go, recoveries 0
+       8.96 m to go, recoveries 0
+       8.76 m to go, recoveries 0
+       8.24 m to go, recoveries 0
+       7.56 m to go, recoveries 0
+       7.16 m to go, recoveries 0
+       6.63 m to go, recoveries 0
+       6.28 m to go, recoveries 0
+       5.86 m to go, recoveries 0
+       5.42 m to go, recoveries 0
+       4.95 m to go, recoveries 0
+       4.32 m to go, recoveries 0
+       3.89 m to go, recoveries 0
+       3.66 m to go, recoveries 0
+       3.01 m to go, recoveries 0
+       2.64 m to go, recoveries 0
+       2.19 m to go, recoveries 0
+       1.86 m to go, recoveries 0
+       1.66 m to go, recoveries 0
+       1.49 m to go, recoveries 0
+       1.26 m to go, recoveries 0
+       1.06 m to go, recoveries 0
+       0.84 m to go, recoveries 0
+       0.69 m to go, recoveries 0
+       0.49 m to go, recoveries 0
+       0.26 m to go, recoveries 0
+       0.17 m to go, recoveries 0
+[2/4] CNC_CELL: SUCCEEDED in 29.6 s
+[INFO] [1793159446.370617805] [factoryrunner_mission]: Navigating to goal: 6.0 1.5...
+[3/4] Goal accepted: INSPECTION (6.00, 1.50)
+       5.88 m to go, recoveries 0
+       5.80 m to go, recoveries 0
+       5.75 m to go, recoveries 0
+       5.60 m to go, recoveries 0
+       5.40 m to go, recoveries 0
+       5.20 m to go, recoveries 0
+       5.00 m to go, recoveries 0
+       4.80 m to go, recoveries 0
+       4.63 m to go, recoveries 0
+       4.43 m to go, recoveries 0
+       4.23 m to go, recoveries 0
+       4.00 m to go, recoveries 0
+       3.83 m to go, recoveries 0
+       3.43 m to go, recoveries 0
+       2.95 m to go, recoveries 0
+       2.50 m to go, recoveries 0
+       2.08 m to go, recoveries 0
+       1.63 m to go, recoveries 0
+       1.15 m to go, recoveries 0
+       0.63 m to go, recoveries 0
+[3/4] INSPECTION: SUCCEEDED in 21.6 s
+[INFO] [1793159473.869178650] [factoryrunner_mission]: Navigating to goal: 0.0 0.0...
+[4/4] Goal accepted: DOCK (0.00, 0.00)
+       8.53 m to go, recoveries 0
+       8.10 m to go, recoveries 0
+       7.66 m to go, recoveries 0
+       7.17 m to go, recoveries 0
+       6.73 m to go, recoveries 0
+       6.27 m to go, recoveries 0
+       5.81 m to go, recoveries 0
+       5.35 m to go, recoveries 0
+       4.90 m to go, recoveries 0
+       4.43 m to go, recoveries 0
+       3.98 m to go, recoveries 0
+       3.55 m to go, recoveries 0
+       3.10 m to go, recoveries 0
+       2.53 m to go, recoveries 0
+       2.08 m to go, recoveries 0
+       1.65 m to go, recoveries 0
+       1.20 m to go, recoveries 0
+       0.75 m to go, recoveries 0
+       0.35 m to go, recoveries 0
+       0.13 m to go, recoveries 0
+       0.15 m to go, recoveries 0
+       0.03 m to go, recoveries 0
+[4/4] DOCK: SUCCEEDED in 22.5 s
+
+MISSION COMPLETE
+Goals succeeded: 4/4
+Elapsed sim time: 92.8 s
+Logged to /home/nethi/fr_ws/src/factoryrunner-nav2/results/slam/missions.csv

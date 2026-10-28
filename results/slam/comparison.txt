@@ -1,0 +1,6 @@
+built map: depot_slam.yaml, reference: depot.yaml
+origin offset: x -0.039 m, y +0.102 m
+cells observed by the built map: 138434 of 185428 (75%)
+reference obstacles found by SLAM (within 0.10 m): 98.1%
+SLAM obstacles present in the reference (within 0.10 m): 87.5%
+SLAM free cells that the reference also calls free: 99.2%
