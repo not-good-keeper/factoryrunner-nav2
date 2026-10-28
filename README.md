@@ -155,7 +155,7 @@ ros2 run factoryrunner trial_runner --ros-args -p mission_file:=$(ros2 pkg prefi
 bash ~/fr_ws/src/factoryrunner-nav2/scripts/obstacle_sweep.sh 3 3.0 2.0 1.5 1.2
 ```
 
-Two opt-in options change the navigation configuration, and both are off by default so the results below keep the configuration they were measured with: `depth_costmap:=True` adds the depth camera as an obstacle source, and `velocity_stop:=True` swaps the fixed stop box for one that follows the robot's motion, for example `ros2 launch factoryrunner sim.launch.py depth_costmap:=True velocity_stop:=True`. Each merges a small file from `config/overlays/` onto `nav2_params.yaml` at launch. Adding `headless:=True use_rviz:=False` to the launch runs it without windows. Results are written to `results/` in this checkout. Navigation only becomes active once the controller has set the initial pose, so the controller should start within about a minute of the launch, before the planner's activation times out.
+Two opt-in options change the navigation configuration, and both are off by default so the results below keep the configuration they were measured with: `depth_costmap:=True` adds the depth camera as an obstacle source, and `velocity_stop:=True` swaps the fixed stop box for one that follows the robot's motion (and `slam:=True` builds a map instead of loading one, described under Mapping), for example `ros2 launch factoryrunner sim.launch.py depth_costmap:=True velocity_stop:=True`. Each merges a small file from `config/overlays/` onto `nav2_params.yaml` at launch. Adding `headless:=True use_rviz:=False` to the launch runs it without windows. Results are written to `results/` in this checkout. Navigation only becomes active once the controller has set the initial pose, so the controller should start within about a minute of the launch, before the planner's activation times out.
 
 `scripts/check.sh` runs the same lint, build and unit-test steps as `.github/workflows/ci.yml`, on a clean copy of the files git would commit. It stands in for CI, since GitHub Actions does not run on this account.
 
@@ -252,6 +252,24 @@ For each depth frame the node back-projects every pixel into 3D using the camera
 
 With the depth camera on, the same crate drop was repeated three times. The robot steered around it in all three, keeping its centre 0.48 to 0.64 m from the crate's centre instead of 0.12 m, and each mission completed all four legs. The crate leg took 38.7, 42.4 and 51.7 s against the 62.6 s failure without the camera. The extra sensor is not free: in a mission with no crate at all, the same leg took 36.3 s with the camera on (`results/depth_costmap_no_obstacle/`) against 28.6 to 29.9 s without it, probably because the camera also sees low clutter near the shelves that the LiDAR passes under, which lengthens the paths.
 
+
+## Mapping: building the map with SLAM
+
+Nav2 ships the depot map, so the main results use it. On a real site there is no map to start from, though, so the depot was also mapped from scratch with `slam_toolbox`, from the robot's LiDAR alone, while Nav2 drove one pass of the station loop:
+
+```bash
+ros2 launch factoryrunner sim.launch.py slam:=True headless:=True use_rviz:=False
+python3 ~/fr_ws/src/factoryrunner-nav2/scripts/map_depot.py --out ~/fr_ws/src/factoryrunner-nav2/maps/depot_slam
+python3 ~/fr_ws/src/factoryrunner-nav2/scripts/compare_maps.py ~/fr_ws/src/factoryrunner-nav2/maps/depot_slam.yaml
+```
+
+`map_depot.py` makes sure `slam_toolbox` is active (its launch often leaves it unconfigured), drives the stations and saves the result as `maps/depot_slam.pgm` and `.yaml`. `compare_maps.py` lines the new map up with the shipped one by world position, both being anchored at the robot's start, and judges only the cells SLAM actually observed.
+
+![SLAM map over the shipped depot map](results/slam_map_overlay.png)
+
+One loop let SLAM observe 75 % of the depot, which leaves the far side of the shelving largely unseen. Within what it observed, the self-built map found 98.1 % of the shipped map's obstacle cells to within 0.1 m, 99.2 % of its free cells are free in the shipped map too, and the two origins differ by 4 cm and 10 cm (`results/slam/comparison.txt`). Of the obstacle cells SLAM marked, 87.5 % match the shipped map; most of the rest are the thin radial streaks visible across open floor, scattered single-cell returns at long range rather than real objects. The real test of a map is navigating with it, so the station loop was run once more with AMCL localizing on the self-built map instead of the shipped one: all four legs succeeded in 92.8 s, in line with the 88.9 to 91.4 s laps on the shipped map (`results/slam/missions.csv`).
+
+Getting there took five attempts, covered in the challenges log: a startup race that leaves `slam_toolbox` unconfigured, Nav2's bringup timing out while waiting for it, and a transform-timing problem that only went away once `slam_toolbox` was given its own parameter section (`config/overlays/slam.yaml`, applied with `slam:=True`). The shipped map remains the default everywhere; the SLAM map is an addition.
 
 ## Machine learning: tuning Nav2 parameters against the harness
 
