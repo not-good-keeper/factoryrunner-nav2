@@ -2,7 +2,7 @@
 
 A TurtleBot3 Waffle works a four-station loop in Gazebo's depot world under Nav2, from RAW_MATERIAL to CNC_CELL to INSPECTION and back to DOCK. A forklift lane is fenced off as a keepout zone, the CNC cell is a 40 % speed zone, and the collision monitor watches stop and slowdown fields around the robot. Navigation comes entirely from Nav2's plugins and configuration; on top of it sit a mission controller and a trial harness, and around it the tools used to put it under pressure: pallets dropped into its path at controlled distances or sliding across the aisle, a health monitor, a C++ depth-camera detector for obstacles the LiDAR cannot see, and a parameter study validated on laps it never saw. The robot is the stock model throughout.
 
-**Video:** _link to be added_
+**Video:** [two-minute demo on YouTube](https://youtu.be/NrOEKnii-g8)
 
 ![Ten laps of the station loop drawn over the depot map](results/route_map.png)
 
