@@ -2,7 +2,9 @@
 
 Station-to-station navigation on a simulated factory floor: a stock TurtleBot3 Waffle running Nav2 (ROS 2 Jazzy) in Gazebo Harmonic's depot world.
 
-**Video:** [two-minute demo on YouTube](https://youtu.be/NrOEKnii-g8)
+[![Demo video: Gazebo and RViz from the same run, click to play on YouTube](docs/demo_thumbnail.png)](https://youtu.be/NrOEKnii-g8)
+
+**[Watch the demo on YouTube](https://youtu.be/NrOEKnii-g8)** (2 min 13 s). The still above is Gazebo on the left and RViz on the right, from the same run, as the robot passes a pallet dropped into its path; in RViz the pallet shows up as the L-shaped mark in the costmap.
 
 ![Ten laps of the station loop drawn over the depot map](results/route_map.png)
 
@@ -20,10 +22,10 @@ The robot drives a four-station loop, RAW_MATERIAL → CNC_CELL → INSPECTION �
 
 | Result | Details |
 |---|---|
-| 40 of 40 legs succeeded over a 10-lap trial, with a pallet dropped into the path on three laps | [Results](#results) |
-| A Nav2 freeze traced with gdb to Fast DDS locks: 2 of 3 runs froze under Fast DDS, none of the 9 after switching to Cyclone DDS | [Biggest challenge](#biggest-challenge), [docs/CHALLENGES.md](docs/CHALLENGES.md) |
-| A 10 cm crate below the LiDAR plane: the robot drove into it without the depth camera, and steered around it in 3 of 3 runs once the camera's point cloud was added to the costmaps | [Perception](#perception-what-the-lidar-cannot-see) |
-| Tuned parameters beat the defaults in 99 of the 100 pairings of 10 tuned and 10 default laps, on a pallet position the study never used; median lap 3.8 % faster | [Machine learning](#machine-learning-tuning-nav2-parameters-against-the-harness) |
+| 40 of 40 legs succeeded over a 10-lap trial, with a pallet dropped into the path on three laps | [Results](#results) · [`trials_20261026-194747.csv`](results/trials_20261026-194747.csv) |
+| A Nav2 freeze traced with gdb to Fast DDS locks: 2 of 3 runs froze under Fast DDS, none of the 9 after switching to Cyclone DDS | [Biggest challenge](#biggest-challenge) · [`missions.csv`](results/missions.csv) · [docs/CHALLENGES.md](docs/CHALLENGES.md) |
+| A 10 cm crate below the LiDAR plane: the robot drove into it without the depth camera, and steered around it in 3 of 3 runs once the camera's point cloud was added to the costmaps | [Perception](#perception-what-the-lidar-cannot-see) · [`blindspot/`](results/blindspot) · [`blindspot_depth/`](results/blindspot_depth) |
+| Tuned parameters were faster than the defaults in all 10 back-to-back lap pairs on a pallet position the study never used (exact Wilcoxon signed-rank p = 0.002); median lap 3.8 % faster | [Bayesian optimisation](#bayesian-optimisation-tuning-nav2-parameters-from-trial-data) · [`tuning_study.csv`](results/tuning_study.csv) · [validation 1](results/validation_20261026-210504.csv), [2](results/validation_20261027-194142.csv) |
 
 The sections after Quick start give the full setup, every configuration change from Jazzy's defaults, and each experiment with the file in `results/` it came from.
 
@@ -65,7 +67,8 @@ flowchart TB
         tr["trial_runner<br/>laps, pallet drops, per-leg metrics"]
         tune["scripts/tune.py<br/>Optuna study"]
         hm["health_monitor<br/>/diagnostics"]
-        vision["factoryrunner_vision (C++)<br/>depth-camera obstacles"]
+        detector["depth_obstacle_detector (C++)<br/>observe only: markers, debug image"]
+        relay["depth_cloud_relay (C++)<br/>opt-in, depth_costmap:=True"]
     end
     subgraph nav2["Nav2 core"]
         bt["bt_navigator"] --> planner["planner_server<br/>NavFn A*"]
@@ -86,7 +89,11 @@ flowchart TB
     cm -- cmd_vel --> sim
     sim -- scan, odom, tf --> amcl
     sim -- scan --> cm
-    sim -- depth image --> vision
+    sim -- depth image --> detector
+    sim -. depth cloud .-> relay
+    relay -. obstacle source .-> planner
+    relay -. obstacle source .-> ctrl
+    relay -. obstacle source .-> cm
     hm -. watches .-> amcl
     hm -. watches .-> cm
 ```
@@ -95,7 +102,7 @@ The core is plain Nav2. AMCL localizes against Nav2's depot map, NavFn plans wit
 
 The safety and constraint layers are configuration on top of that core. Costmap filters read two masks generated from the depot map by `scripts/make_masks.py`: the keepout mask marks the forklift lane (map x 2.0 to 2.8 m, y −2.5 to 2.5 m) as lethal, and the speed mask sets a 40 % limit around the CNC cell, which the speed filter publishes on `/speed_limit` for MPPI to apply. The collision monitor sits between the velocity smoother and the robot, with a stop box, a slowdown box that cuts speed to 30 %, and Jazzy's footprint-approach check.
 
-The application layer is this package. `mission_controller` sends the stations from `config/mission.yaml` one at a time, cancels any leg that runs past `leg_timeout_s` (120 simulated seconds by default) and logs every leg to `results/missions.csv`. `trial_runner` drives a set number of laps, drops a pallet onto the CNC_CELL leg on chosen laps and records per-leg metrics; `obstacle` spawns and removes the pallet; and `scripts/tune.py` runs the parameter study. `health_monitor` and the C++ `factoryrunner_vision` detector only watch, one the stack and the other the robot's depth camera, and never command motion.
+The application layer is this package. `mission_controller` sends the stations from `config/mission.yaml` one at a time, cancels any leg that runs past `leg_timeout_s` (120 simulated seconds by default) and logs every leg to `results/missions.csv`. `trial_runner` drives a set number of laps, drops a pallet onto the CNC_CELL leg on chosen laps and records per-leg metrics; `obstacle` spawns and removes the pallet; and `scripts/tune.py` runs the parameter study. `health_monitor` and the C++ `depth_obstacle_detector` only watch, one the stack and the other the robot's depth camera, and never command motion. The depth camera reaches navigation by a separate path, drawn dashed above: with `depth_costmap:=True`, `depth_cloud_relay` passes the camera's point cloud to both costmaps and the collision monitor as a second obstacle source next to the LiDAR.
 
 ## Setup
 
@@ -282,7 +289,7 @@ One loop let SLAM observe 75 % of the depot, which leaves the far side of the sh
 
 Getting there took five attempts, covered in the challenges log: a startup race that leaves `slam_toolbox` unconfigured, Nav2's bringup timing out while waiting for it, and a transform-timing problem that only went away once `slam_toolbox` was given its own parameter section (`config/overlays/slam.yaml`, applied with `slam:=True`). The shipped map remains the default everywhere; the SLAM map is an addition.
 
-## Machine learning: tuning Nav2 parameters against the harness
+## Bayesian optimisation: tuning Nav2 parameters from trial data
 
 The default Waffle has no RGB camera, and the assignment's robot is the default one, so there was no image model to train. Learning went where the robot already produces data instead, as Bayesian optimisation of four Nav2 parameters scored by the trial harness. Nav2 still plans and controls; the tuner only changes parameter values at runtime and never touches the velocity commands.
 
@@ -310,7 +317,7 @@ The study used Optuna's TPE sampler with seed 42, and its first trial was the de
 | Default | 10 | 93.3, 95.8, 93.3, 96.3, 92.7, 93.3, 93.5, 93.8, 95.0, 96.1 | 93.6 | 30.9–35.0 | 0 | 0 | 0.63 |
 | Tuned (trial 23) | 10 | 90.0, 89.7, 90.3, 92.3, 90.0, 90.2, 90.0, 89.7, 90.7, 93.0 | 90.1 | 30.5–33.1 | 0 | 0 | 0.63 |
 
-Across the 100 possible pairings of a default lap with a tuned lap, the tuned lap was faster in 99; the one exception is the slowest tuned lap, at 93.0 s, against the fastest default, at 92.7 s. An exact two-sided Mann–Whitney test on the lap times gives p = 2.2 × 10⁻⁵, computed by `mann_whitney_exact` in `factoryrunner/tuning.py` and printed by `scripts/tune.py report`. The median lap fell by 3.5 s (3.8 %) with no change in failures, recoveries or the closest scan return, and the second run, on a later day, repeated what the first had shown on its own (p = 0.008 for its five laps a side). The tuned set has a slightly lower `vx_max` than the default, so the gain does not come from a higher speed cap. Heavier path-following and obstacle-cost weights producing fewer corrections would account for it, though that explanation has not been tested.
+Across the 100 possible pairings of a default lap with a tuned lap, the tuned lap was faster in 99; the one exception is the slowest tuned lap, at 93.0 s, against the fastest default, at 92.7 s. An exact two-sided Mann–Whitney test on the lap times gives p = 2.2 × 10⁻⁵, computed by `mann_whitney_exact` in `factoryrunner/tuning.py` and printed by `scripts/tune.py report`. The median lap fell by 3.5 s (3.8 %) with no change in failures, recoveries or the closest scan return, and the second run, on a later day, repeated what the first had shown on its own (p = 0.008 for its five laps a side). The Mann–Whitney test treats the 20 laps as independent samples. Validation also ran each tuned lap straight after a default lap at the same spot, which gives ten matched pairs: the tuned lap was faster in all ten, by 2.7 to 6.1 s, and an exact two-sided Wilcoxon signed-rank test on those differences gives p = 0.002 (`wilcoxon_signed_rank_exact`, also printed by the report). The default lap always ran first in its pair, so a drift within each pair would favour one side; the lap times show no sign of one, but the design does not rule it out. The tuned set has a slightly lower `vx_max` than the default, so the gain does not come from a higher speed cap. Heavier path-following and obstacle-cost weights producing fewer corrections would account for it, though that explanation has not been tested.
 
 The conditions are still narrow: one machine, one held-out pallet spot, ten laps a side, and a spread of 3.6 s between the fastest and slowest default laps. The result says the tuned set was faster on this course in this simulation, not that it is better in general. The tuned values are not written into `config/nav2_params.yaml`, and every other result in this README uses the defaults.
 
@@ -332,4 +339,10 @@ Several limits come from the navigation stack itself. In the default configurati
 
 ## Biggest challenge
 
-The robot would finish its first leg and then stop for good, with the `map` frame gone. AMCL looked like the culprit, but it had not crashed: every Nav2 node had dropped off the ROS graph while the process hosting them was still alive. The debugger could not attach to a running process on this system, so the Nav2 process was started under gdb through `ros2 launch --launch-prefix`, and at the next freeze a dump of all its threads showed twenty of them blocked on Fast DDS locks and none in Nav2's own code. Moving to Cyclone DDS ended the freeze. The same runs revealed a second, unrelated fault, in which Jazzy's 20 ms `default_server_timeout` let one late planner reply abort a whole goal, because the default behaviour tree only runs its recoveries for specific error codes. The full account, with every run counted, is in [docs/CHALLENGES.md](docs/CHALLENGES.md).
+The project kept one rule: the robot does not change. Treating the Waffle like a machine already on a factory floor meant every problem had to be understood inside the system that was already there, and that is how the two hardest ones were found.
+
+**A freeze that looked like localization.** The robot finished its first leg and then sat still, 9.61 m from its next goal, and `tf2_echo map odom` reported that the `map` frame no longer existed. That pointed at AMCL, so before trusting it the run was reproduced headless with the same configuration, and two of three runs froze the same way. Checking AMCL directly changed the picture. `ros2 lifecycle get /amcl` answered "Node not found", `ros2 node list` showed every Nav2 node gone, and the process hosting them was still alive, in one run idle at 0 % CPU. A crash in AMCL would not take every other node with it, so the whole process became the suspect. WSL's `ptrace_scope` setting stops gdb attaching to a running process, so Nav2 was started under gdb through `ros2 launch --launch-prefix`, and at the next freeze 20 of its 75 threads were blocked on Fast DDS locks, with no Nav2 code on any blocked path. None of the nine runs after the switch to Cyclone DDS froze, which is strong evidence of a middleware fault rather than proof of one. One abort survived the switch, and it turned out to be a second, separate fault: Jazzy's 20 ms `default_server_timeout` let one late planner reply abort a whole goal, because the default behaviour tree only runs its recoveries for specific error codes.
+
+**A blind spot found by reading the robot.** The Waffle's model file lists a depth camera that Gazebo renders but nothing subscribes to. The LiDAR scans a single plane about 17 cm up, which raised the question of what happens to anything lower. With an observe-only C++/OpenCV detector running on that camera, a 10 cm crate was dropped onto the robot's path. The camera flagged it 2.83 m ahead while the LiDAR's closest return came from something behind it, and the robot drove into it. Only once the gap was shown did the depth cloud go into the costmaps, and the robot then steered around the crate in 3 of 3 runs. The camera also slowed the same leg when there was no crate at all (36.3 s against about 29 s), so it stays opt-in.
+
+The full account, with every run counted, is in [docs/CHALLENGES.md](docs/CHALLENGES.md).
