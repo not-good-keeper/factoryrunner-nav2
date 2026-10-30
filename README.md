@@ -1,6 +1,6 @@
 # FactoryRunner
 
-A TurtleBot3 Waffle works a four-station loop in Gazebo's depot world under Nav2, from RAW_MATERIAL to CNC_CELL to INSPECTION and back to DOCK. A forklift lane is fenced off as a keepout zone, the CNC cell is a 40 % speed zone, and the collision monitor watches stop and slowdown fields around the robot. Navigation comes entirely from Nav2's plugins and configuration; on top of it sit a mission controller and a trial harness, and around it the tools used to put it under pressure: pallets dropped into its path at controlled distances or sliding across the aisle, a health monitor, a C++ depth-camera detector for obstacles the LiDAR cannot see, and a parameter study validated on laps it never saw. The robot is the stock model throughout.
+Station-to-station navigation on a simulated factory floor: a stock TurtleBot3 Waffle running Nav2 (ROS 2 Jazzy) in Gazebo Harmonic's depot world.
 
 **Video:** [two-minute demo on YouTube](https://youtu.be/NrOEKnii-g8)
 
@@ -8,13 +8,24 @@ A TurtleBot3 Waffle works a four-station loop in Gazebo's depot world under Nav2
 
 Every lap of the 10-lap trial, drawn from the robot's own localization (`results/route_trials_10lap_20261027b.csv`). On the three laps where a pallet was dropped onto the path, the route swings around it; the keepout lane and the CNC speed zone are drawn from the same masks Nav2 uses.
 
-## Highlights
+## What it does
 
-- **Navigation that holds up under test.** All 40 legs of a 10-lap trial succeeded with a pallet dropped into the robot's path, and a sweep of drop distances shows where the safety layer takes over as warning time shrinks.
-- **Two real faults traced to their cause.** A Nav2 freeze followed through gdb thread dumps into Fast DDS locks and fixed by changing middleware, and a 20 ms behaviour-tree timeout that let a single late reply abort an entire goal. The story is in [docs/CHALLENGES.md](docs/CHALLENGES.md).
-- **Perception without touching the robot.** The Waffle's own depth camera, which Nav2's launch leaves unused, feeds a C++/OpenCV detector that spots a 10 cm crate the LiDAR never sees; fed into the costmaps as well, it turns a collision with that crate into a clean detour in three runs out of three.
-- **Machine learning where the data is.** An Optuna study of four Nav2 parameters; on a pallet position the study never used, the tuned set won 99 of 100 lap pairings against the defaults (10 laps each, p = 2.2 × 10⁻⁵), 3.8 % faster with no extra failures.
-- **Reliability tooling.** A health monitor on `/diagnostics`, per-leg timeouts, a harness for static, timed and moving obstacles, local CI in `scripts/check.sh` and a headless Docker image.
+The robot drives a four-station loop, RAW_MATERIAL → CNC_CELL → INSPECTION → DOCK, and is never modified; every change is configuration or code around Nav2.
+
+- **Navigation.** Plain Nav2: NavFn A* plans, MPPI follows the path, AMCL localizes on Nav2's depot map. No custom navigation algorithm.
+- **Perception and safety.** A keepout mask fences off a forklift lane, a speed mask caps the CNC cell at 40 %, and the collision monitor's LiDAR stop and slowdown fields sit between the controller and the wheels. A C++/OpenCV node reads the Waffle's own depth camera, which the stock launch never bridges, to find obstacles below the LiDAR's scan plane.
+- **Reliability and testing.** A mission controller with a timeout on every leg, a trial harness that drops pallets into the robot's path at controlled distances, a health monitor on `/diagnostics`, and an Optuna study of Nav2 parameters checked on laps it never saw.
+
+## Key results
+
+| Result | Details |
+|---|---|
+| 40 of 40 legs succeeded over a 10-lap trial, with a pallet dropped into the path on three laps | [Results](#results) |
+| A Nav2 freeze traced with gdb to Fast DDS locks: 2 of 3 runs froze under Fast DDS, none of the 9 after switching to Cyclone DDS | [Biggest challenge](#biggest-challenge), [docs/CHALLENGES.md](docs/CHALLENGES.md) |
+| A 10 cm crate below the LiDAR plane: the robot drove into it without the depth camera, and steered around it in 3 of 3 runs once the camera's point cloud was added to the costmaps | [Perception](#perception-what-the-lidar-cannot-see) |
+| Tuned parameters beat the defaults in 99 of the 100 pairings of 10 tuned and 10 default laps, on a pallet position the study never used; median lap 3.8 % faster | [Machine learning](#machine-learning-tuning-nav2-parameters-against-the-harness) |
+
+The sections after Quick start give the full setup, every configuration change from Jazzy's defaults, and each experiment with the file in `results/` it came from.
 
 ## Quick start
 
@@ -157,7 +168,7 @@ bash ~/fr_ws/src/factoryrunner-nav2/scripts/obstacle_sweep.sh 3 3.0 2.0 1.5 1.2
 
 Two opt-in options change the navigation configuration, and both are off by default so the results below keep the configuration they were measured with: `depth_costmap:=True` adds the depth camera as an obstacle source, and `velocity_stop:=True` swaps the fixed stop box for one that follows the robot's motion (and `slam:=True` builds a map instead of loading one, described under Mapping), for example `ros2 launch factoryrunner sim.launch.py depth_costmap:=True velocity_stop:=True`. Each merges a small file from `config/overlays/` onto `nav2_params.yaml` at launch. Adding `headless:=True use_rviz:=False` to the launch runs it without windows. Results are written to `results/` in this checkout. Navigation only becomes active once the controller has set the initial pose, so the controller should start within about a minute of the launch, before the planner's activation times out.
 
-`scripts/check.sh` runs the same lint, build and unit-test steps as `.github/workflows/ci.yml`, on a clean copy of the files git would commit. It stands in for CI, since GitHub Actions does not run on this account.
+`scripts/check.sh` runs the repository's lint, build and unit-test checks (the same steps as `.github/workflows/ci.yml`) on a clean copy of the files git would commit. GitHub Actions is not enabled for this repository, so this script is how every commit was checked.
 
 ```bash
 bash scripts/check.sh
