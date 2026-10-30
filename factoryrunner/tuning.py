@@ -5,7 +5,7 @@ README; changing them after seeing results would make the study meaningless.
 """
 
 from dataclasses import dataclass
-from itertools import combinations
+from itertools import combinations, product
 
 
 @dataclass(frozen=True)
@@ -85,5 +85,35 @@ def mann_whitney_exact(a, b):
                    [pooled[i] for i in range(len(pooled)) if i not in chosen])
         total += 1
         if abs(u - centre) >= abs(observed - centre) - 1e-9:
+            extreme += 1
+    return observed, extreme / total
+
+
+def wilcoxon_signed_rank_exact(differences):
+    """Exact two-sided Wilcoxon signed-rank test on paired differences; returns (W+, p-value).
+
+    Zero differences are dropped and tied magnitudes share their average rank. Every sign
+    pattern is enumerated, which is 1,024 for the ten validation pairs.
+    """
+    nonzero = [d for d in differences if d != 0]
+    if not nonzero:
+        raise ValueError('need at least one non-zero difference')
+    order = sorted(range(len(nonzero)), key=lambda i: abs(nonzero[i]))
+    ranks = [0.0] * len(nonzero)
+    i = 0
+    while i < len(order):
+        j = i
+        while j + 1 < len(order) and abs(nonzero[order[j + 1]]) == abs(nonzero[order[i]]):
+            j += 1
+        for k in range(i, j + 1):
+            ranks[order[k]] = (i + j) / 2 + 1
+        i = j + 1
+    centre = sum(ranks) / 2
+    observed = sum(r for r, d in zip(ranks, nonzero) if d > 0)
+    extreme = total = 0
+    for signs in product((0, 1), repeat=len(ranks)):
+        w = sum(r for r, positive in zip(ranks, signs) if positive)
+        total += 1
+        if abs(w - centre) >= abs(observed - centre) - 1e-9:
             extreme += 1
     return observed, extreme / total

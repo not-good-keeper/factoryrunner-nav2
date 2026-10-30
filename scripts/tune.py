@@ -149,8 +149,12 @@ def summarise(validation_csvs):
             rows = list(csv.DictReader(f))
         for row in rows:
             config = row['run_id'].split('-')[-2]
+            # run_id is <run>-<config>-lap<n>; the default and tuned laps sharing <run> and <n>
+            # ran back to back, which makes them a matched pair.
+            run, lap_tag = row['run_id'].rsplit('-', 2)[0], row['run_id'].split('-')[-1]
             lap = laps.setdefault((config, row['run_id']), {
-                'lap_time': 0.0, 'failed': 0, 'recoveries': 0, 'clearance': [], 'legs': 0})
+                'lap_time': 0.0, 'failed': 0, 'recoveries': 0, 'clearance': [], 'legs': 0,
+                'pair': (path.name, run, lap_tag)})
             lap['lap_time'] += float(row['duration_s'])
             lap['failed'] += row['result'] != 'SUCCEEDED'
             lap['recoveries'] += int(row['recoveries'])
@@ -168,7 +172,7 @@ def cmd_report(args):
     import matplotlib.pyplot as plt
     import optuna
 
-    from factoryrunner.tuning import mann_whitney_exact, SEARCH_SPACE
+    from factoryrunner.tuning import mann_whitney_exact, SEARCH_SPACE, wilcoxon_signed_rank_exact
 
     matplotlib.use('Agg')
     study = optuna.load_study(study_name=STUDY_NAME, storage=args.storage)
@@ -235,6 +239,14 @@ def cmd_report(args):
         print(f'lap times tuned:   {", ".join(f"{t:.1f}" for t in tuned)}')
         print(f'exact two-sided Mann-Whitney: U = {u:g} of {len(default) * len(tuned)}, '
               f'p = {p_value:.2g}')
+        tuned_by_pair = {lap['pair']: lap['lap_time'] for lap in pooled['tuned']}
+        diffs = [lap['lap_time'] - tuned_by_pair[lap['pair']]
+                 for lap in pooled['default'] if lap['pair'] in tuned_by_pair]
+        if diffs:
+            w, p_paired = wilcoxon_signed_rank_exact(diffs)
+            faster = sum(d > 0 for d in diffs)
+            print(f'matched pairs: tuned faster in {faster} of {len(diffs)}; exact two-sided '
+                  f'Wilcoxon signed-rank: W+ = {w:g}, p = {p_paired:.3g}')
     return 0
 
 

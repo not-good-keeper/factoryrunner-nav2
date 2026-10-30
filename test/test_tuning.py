@@ -1,5 +1,5 @@
 from factoryrunner.tuning import (by_node, defaults, mann_whitney_exact, objective,
-                                  SEARCH_SPACE)
+                                  SEARCH_SPACE, wilcoxon_signed_rank_exact)
 import pytest
 
 
@@ -63,4 +63,16 @@ def test_mann_whitney_complete_separation_5_v_5():
 def test_mann_whitney_identical_samples_are_not_significant():
     u, p = mann_whitney_exact([1.0, 2.0, 3.0], [1.0, 2.0, 3.0])
     assert u == pytest.approx(4.5)
+    assert p == pytest.approx(1.0)
+
+
+def test_wilcoxon_all_ten_pairs_one_way():
+    w, p = wilcoxon_signed_rank_exact([3.3, 6.1, 3.0, 4.0, 2.7, 3.1, 3.5, 4.1, 4.3, 3.1])
+    assert w == 55
+    assert p == pytest.approx(2 / 1024)
+
+
+def test_wilcoxon_drops_zeros_and_balanced_signs_are_not_significant():
+    w, p = wilcoxon_signed_rank_exact([1.0, -1.0, 0.0])
+    assert w == pytest.approx(1.5)
     assert p == pytest.approx(1.0)
